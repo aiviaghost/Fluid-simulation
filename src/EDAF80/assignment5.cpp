@@ -212,24 +212,6 @@ edaf80::Assignment5::run()
 			return -v * spiky_pow2_derivative_scaling_factor;
 		};
 
-	auto smoothing_kernel = [&](float dist) -> float {
-			if (dist >= smoothing_radius) {
-				return 0;
-			}
-			float volume = 10 / (PI * std::pow(smoothing_radius, 5));
-			float v = (smoothing_radius - dist);
-			return v * v * v * volume;
-		};
-
-	auto smoothing_kernel_derivative = [&](float dist) -> float {
-			if (dist >= smoothing_radius) {
-				 return 0;
-			}
-			float scale = 30 / (std::pow(smoothing_radius, 5) * PI);
-			float v = (smoothing_radius - dist);
-			return v * scale;
-		};
-
 
 	auto density_kernel = [&](float dist) -> float {
 			return spiky_kernel_pow2(dist);
@@ -251,7 +233,7 @@ edaf80::Assignment5::run()
 			float density = 0;
 			for (int i = 0; i < num_particles; i++) {
 				float dist = glm::length(positions[i] - point);
-				density += smoothing_kernel(dist);
+				density += density_kernel(dist);
 			}
 			return density;
 		};
