@@ -163,6 +163,55 @@ edaf80::Assignment5::run()
 			}
 		};
 
+	auto smoothing_kernel_poly6 = [&](float dist) -> float {
+			if (dist >= smoothing_radius) {
+				return 0;
+			}
+			float poly6_scaling_factor = 4 / (PI * std::pow(smoothing_radius, 8));
+			float v = smoothing_radius - dist;
+			return v * v * v * poly6_scaling_factor;
+		};
+
+	auto spiky_kernel_pow3 = [&](float dist) -> float {
+			if (dist >= smoothing_radius) {
+				return 0;
+			}
+			
+			float spiky_pow3_scaling_factor = 10 / (PI * std::pow(smoothing_radius, 5));
+			float v = smoothing_radius - dist;
+			return v * v * v * spiky_pow3_scaling_factor;
+		};
+
+	auto spiky_kernel_pow2 = [&](float dist) -> float {
+			if (dist >= smoothing_radius) {
+				return 0;
+			}
+
+			float spiky_pow2_scaling_factor = 6 / (PI * std::pow(smoothing_radius, 4));
+			float v = smoothing_radius - dist;
+			return v * v * spiky_pow2_scaling_factor;
+		};
+
+	auto derivative_spiky_pow3 = [&](float dist) -> float {
+			if (dist > smoothing_radius) {
+				return 0;
+			}
+
+			float spiky_pow3_derivative_scaling_factor = 30 / (PI * std::pow(smoothing_radius, 5));
+			float v = smoothing_radius - dist;
+			return -v * v * spiky_pow3_derivative_scaling_factor;
+		};
+
+	auto derivative_spiky_pow2 = [&](float dist) -> float {
+			if (dist > smoothing_radius) {
+				return 0;
+			}
+
+			float spiky_pow2_derivative_scaling_factor = 12 / (PI * std::pow(smoothing_radius, 4));
+			float v = smoothing_radius - dist;
+			return -v * spiky_pow2_derivative_scaling_factor;
+		};
+
 	auto smoothing_kernel = [&](float dist) -> float {
 			if (dist >= smoothing_radius) {
 				return 0;
@@ -179,6 +228,23 @@ edaf80::Assignment5::run()
 			float scale = 30 / (std::pow(smoothing_radius, 5) * PI);
 			float v = (smoothing_radius - dist);
 			return v * scale;
+		};
+
+
+	auto density_kernel = [&](float dist) -> float {
+			return spiky_kernel_pow2(dist);
+		};
+
+	auto near_density_kernel = [&](float dist) -> float {
+			return spiky_kernel_pow3(dist);
+		};
+
+	auto density_derivative = [&](float dist) -> float {
+			return derivative_spiky_pow2(dist);
+		};
+
+	auto near_density_derivative = [&](float dist) -> float {
+			return derivative_spiky_pow3(dist);
 		};
 
 	auto get_density = [&](glm::vec3 point) -> float {
@@ -210,7 +276,7 @@ edaf80::Assignment5::run()
 				glm::vec3 diff = positions[i] - positions[idx];
 				float dist = glm::length(diff);
 				glm::vec3 dir = dist > 0 ? diff / dist : get_random_dir();
-				float slope = smoothing_kernel_derivative(dist);
+				float slope = density_derivative(dist);
 				float p2 = convert_density_to_pressure(densities[i]);
 				pressure_force += ((p1 + p2) / 2) * dir * slope / densities[i];
 			}
