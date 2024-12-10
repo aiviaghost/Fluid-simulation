@@ -108,16 +108,17 @@ edaf80::Assignment5::run()
 
 	float PI = 3.14159265358979;
 
-	int num_particles = 200;
+	int num_particles = 400;
 	float time_step = 1 / 120.0;
-	float damping_factor = 1.0;
-	int width = 80.0f, height = 45.0f;
+	float damping_factor = 0.95;
+	int width = 80.0f, height = 60.0f;
 	int half_width = width / 2, half_height = height / 2;
 	float gravity_strength = 0.0;
-	float smoothing_radius = 12.0;
-	float target_density = 2.75;
-	float pressure_multiplier = 0.8;
+	float smoothing_radius = 3.5 * grid_sphere_radius;
+	float target_density = 50;
+	float pressure_multiplier = 0.9;
 
+	volatile float avg_density = 0;
 
 	std::vector<Node> nodes;
 	std::vector<glm::vec3> positions, velocities, predicted_positions(num_particles);
@@ -166,16 +167,18 @@ edaf80::Assignment5::run()
 			if (dist >= smoothing_radius) {
 				return 0;
 			}
-			float volume = (PI * std::pow(smoothing_radius, 4)) / 6;
-			return (smoothing_radius - dist) * (smoothing_radius - dist) / volume;
+			float volume = 10 / (PI * std::pow(smoothing_radius, 5));
+			float v = (smoothing_radius - dist);
+			return v * v * v * volume;
 		};
 
 	auto smoothing_kernel_derivative = [&](float dist) -> float {
 			if (dist >= smoothing_radius) {
 				 return 0;
 			}
-			float scale = 12 / (std::pow(smoothing_radius, 4) * PI);
-			return (dist - smoothing_radius) * scale;
+			float scale = 30 / (std::pow(smoothing_radius, 5) * PI);
+			float v = (smoothing_radius - dist);
+			return v * scale;
 		};
 
 	auto get_density = [&](glm::vec3 point) -> float {
@@ -189,7 +192,9 @@ edaf80::Assignment5::run()
 
 	auto convert_density_to_pressure = [&](float density) -> float {
 			float diff = density - target_density;
-			return density * pressure_multiplier;
+			//std::cout << diff << std::endl;
+			avg_density += density;
+			return diff * pressure_multiplier;
 		};
 
 
@@ -278,32 +283,32 @@ edaf80::Assignment5::run()
 
 		glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
-		time_step = std::chrono::duration<float>(deltaTimeUs).count();
+		//time_step = std::chrono::duration<float>(deltaTimeUs).count();
 		if (!shader_reload_failed) {
 			//
 			// Todo: Render all your geometry here.
 			//
-			concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+			for (int i = 0; i < num_particles; i++) {
 				velocities[i] += glm::vec3(0.0, -gravity_strength, 0.0) * time_step;
 				predicted_positions[i] = positions[i] + velocities[i] * (1 / 120.0f);
-				
-			});
+			}
 
-			concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+			avg_density = 0;
+			for (int i = 0; i < num_particles; i++) {
 				densities[i] = get_density(predicted_positions[i]);
 				//std::cout << target_density << " " << densities[i] << std::endl;
-			});
+			}
 
-			concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+			for (int i = 0; i < num_particles; i++) {
 				glm::vec3 pressure_force = get_pressure_force(i);
 				glm::vec3 pressure_acceleration = pressure_force / densities[i];
 				velocities[i] += pressure_acceleration * time_step;
-			});
+			}
 
-			concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+			for (int i = 0; i < num_particles; i++) {
 				positions[i] += velocities[i] * time_step;
 				handle_collision(i);
-			});
+			}
 
 			for (int i = 0; i < num_particles; i++) {
 				nodes[i].get_transform().SetTranslate(positions[i]);
@@ -320,18 +325,20 @@ edaf80::Assignment5::run()
 		//
 		bool const opened = ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_None);
 		if (opened) {
+			ImGui::Text("Avg density: %.4f", avg_density / num_particles);
+
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);
 			ImGui::SliderFloat("Basis length scale", &basis_length_scale, 0.0f, 100.0f);
 
-			ImGui::SliderInt("Bounding box width", &width, 10, 1000);
-			ImGui::SliderInt("Bounding box height", &height, 10, 1000);
+			ImGui::SliderInt("Bounding box width", &width, 10, 100);
+			ImGui::SliderInt("Bounding box height", &height, 10, 100);
 
 			ImGui::SliderFloat("Damping factor", &damping_factor, 0.0f, 1.0f);
-			ImGui::SliderFloat("Gravity strength", &gravity_strength, 0.0f, 100.0f);
-			ImGui::SliderFloat("Smoothing radius", &smoothing_radius, 0.01f, 100.0f);
-			//ImGui::SliderFloat("Time step", &time_step, 0.0f, 0.5f);
-			ImGui::SliderFloat("Target_density", &target_density, 0.0f, 1.0f);
+			ImGui::SliderFloat("Gravity strength", &gravity_strength, 0.0f, 10.0f);
+			ImGui::SliderFloat("Smoothing radius", &smoothing_radius, grid_sphere_radius, 100.0f);
+			ImGui::SliderFloat("Time step", &time_step, 0.0f, 0.5f);
+			ImGui::SliderFloat("Target_density", &target_density, 0.0f, 700.0f);
 			ImGui::SliderFloat("Pressure multiplier", &pressure_multiplier, 0.0f, 1000.0f);
 		}
 		ImGui::End();
