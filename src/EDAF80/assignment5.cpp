@@ -235,13 +235,13 @@ edaf80::Assignment5::run()
 				float dist = glm::length(positions[i] - point);
 				density += density_kernel(dist);
 			}
+			avg_density += density;
 			return density;
 		};
 
 	auto convert_density_to_pressure = [&](float density) -> float {
 			float diff = density - target_density;
 			//std::cout << diff << std::endl;
-			avg_density += density;
 			return diff * pressure_multiplier;
 		};
 
