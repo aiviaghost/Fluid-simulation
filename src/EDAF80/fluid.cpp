@@ -117,7 +117,7 @@ edaf80::Fluid::run()
 	float gravity_strength = 0.0;
 	float smoothing_radius = 0.3;//1.2;
 	float target_density = 2.75;
-	float pressure_multiplier = 0.5f;
+	float pressure_multiplier = 40.0;
 
 	int PRIME1 = 86183;
 	int PRIME2 = 7475723;
@@ -155,7 +155,7 @@ edaf80::Fluid::run()
 
 	num_particles = positions.size();
 	std::vector<float> densities(num_particles);
-	std::vector<Node> predicted_positions(num_particles);
+	std::vector<glm::vec3> predicted_positions(num_particles);
 
 	auto handle_collision = [&](int idx) -> void {
 		if (positions[idx].x + grid_sphere_radius > half_width) {
@@ -191,9 +191,9 @@ edaf80::Fluid::run()
 		return good_mod(hash, num_particles);
 	};
 
-	auto update_spatial = [&]() -> void {
+	auto update_spatial = [&](std::vector<glm::vec3> &vec) -> void {
 		for (int i = 0; i < num_particles; i++) {
-			spatial[i] = {point_to_hash(positions[i]), i};
+			spatial[i] = {point_to_hash(vec[i]), i};
 		}
 
 		sort(spatial.begin(), spatial.end());
@@ -244,7 +244,8 @@ edaf80::Fluid::run()
 				int start_spatial_ind = start_inds[cur_hash];
 				if (start_spatial_ind == -1) continue;
 				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].first == cur_hash; spatial_ind++) {
-					float dist = glm::l2Norm(positions[spatial[spatial_ind].second] - point);
+					//float dist = glm::l2Norm(positions[spatial[spatial_ind].second] - point);
+					float dist = glm::l2Norm(predicted_positions[spatial[spatial_ind].second] - point);
 					float influence = smoothing_kernel(dist, smoothing_radius);
 					density += mass * influence;
 				}
@@ -283,7 +284,8 @@ edaf80::Fluid::run()
 
 	auto calculate_pressure_force = [&](int idx) -> glm::vec3 {
 		glm::vec3 force = glm::vec3(0.0);
-		glm::vec3 point = positions[idx];
+		//glm::vec3 point = positions[idx];
+		glm::vec3 point = predicted_positions[idx];
 
 		int hash = point_to_hash(point);
 
@@ -298,7 +300,8 @@ edaf80::Fluid::run()
 					int other_idx = spatial[spatial_ind].second;
 					if (other_idx == idx) continue;
 
-					glm::vec3 offset = positions[other_idx] - point;
+					//glm::vec3 offset = positions[other_idx] - point;
+					glm::vec3 offset = predicted_positions[other_idx] - point;
 					float dist = glm::l2Norm(offset);
 					glm::vec3 dir = dist == 0 ? get_random_dir() : offset / dist;
 					float slope = smoothing_kernel_derivative(dist, smoothing_radius);
@@ -328,10 +331,15 @@ edaf80::Fluid::run()
 
 
 	auto simulation_step = [&](float delta_time) -> void {
-		update_spatial();
 		for (int i = 0; i < num_particles; i++) {
 			velocities[i] += glm::vec3(0.0, -1.0, 0.0) * gravity_strength * delta_time;
-			densities[i] = calculate_density(positions[i]);
+			predicted_positions[i] = positions[i] + velocities[i] * delta_time;
+		}
+
+		update_spatial(predicted_positions);
+
+		for (int i = 0; i < num_particles; i++) {
+			densities[i] = calculate_density(predicted_positions[i]);
 		}
 
 		for (int i = 0; i < num_particles; i++) {
