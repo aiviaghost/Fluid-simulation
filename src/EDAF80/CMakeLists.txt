@@ -28,6 +28,19 @@ target_link_libraries (EDAF80_Assignment5 PRIVATE assignment_setup parametric_sh
 copy_dlls (EDAF80_Assignment5 "${CMAKE_CURRENT_BINARY_DIR}")
 
 
+
+# Fluid
+add_executable (EDAF80_Fluid)
+target_sources (
+	EDAF80_Fluid
+	PRIVATE
+		[[fluid.hpp]]
+		[[fluid.cpp]]
+)
+target_link_libraries (EDAF80_Fluid PRIVATE assignment_setup parametric_shapes)
+copy_dlls (EDAF80_Fluid "${CMAKE_CURRENT_BINARY_DIR}")
+
+
 install (
 	TARGETS
 		EDAF80_Assignment5
