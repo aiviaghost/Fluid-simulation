@@ -18,6 +18,150 @@
 #include <windows.h>
 #include <ppl.h>
 
+// particle renderer
+#include "core/Log.h"
+#include "core/opengl.hpp"
+
+#include <glm/gtc/matrix_transform.hpp>
+
+class ParticleRenderer {
+private:
+	// Geometry data
+	GLuint _vao{ 0u };
+	GLsizei _vertices_nb{ 0u };
+	GLsizei _indices_nb{ 0u };
+	GLenum _drawing_mode{ GL_TRIANGLES };
+	bool _has_indices{ false };
+
+	// Program data
+	GLuint const* _program{ nullptr };
+	std::function<void(GLuint)> _set_uniforms;
+
+	// Material data
+	bonobo::material_data _constants;
+
+	// Transformation data
+	TRSTransformf _transform;
+
+	// Debug data
+	std::string _name{ "Render un-named node" };
+
+	void render(glm::mat4 const& view_projection, glm::mat4& world, GLuint program, std::function<void(GLuint)> const& set_uniforms, std::vector<glm::vec3> const& positions) const {
+		if (_vao == 0u || program == 0u)
+			return;
+
+		utils::opengl::debug::beginDebugGroup(_name);
+
+		glUseProgram(program);
+
+		//glm::mat4 const& world = glm::mat4(1.0);
+
+		/*for (int i = 0; i < 4; i++) {
+			for (int j = 0; j < 4; j++) {
+				std::cout << world[i][j] << " ";
+			}
+			std::cout << std::endl;
+		}
+		std::exit(0);*/
+
+		auto const normal_model_to_world = glm::transpose(glm::inverse(world));
+
+		set_uniforms(program);
+
+		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_model_to_world"), 1, GL_FALSE, glm::value_ptr(world));
+		glUniformMatrix4fv(glGetUniformLocation(program, "normal_model_to_world"), 1, GL_FALSE, glm::value_ptr(normal_model_to_world));
+		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_world_to_clip"), 1, GL_FALSE, glm::value_ptr(view_projection));
+
+		/*for (size_t i = 0u; i < _textures.size(); ++i) {
+			auto const& texture = _textures[i];
+			glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(i));
+			glBindTexture(std::get<2>(texture), std::get<1>(texture));
+			glUniform1i(glGetUniformLocation(program, std::get<0>(texture).c_str()), static_cast<GLint>(i));
+
+			std::string texture_presence_var_name = "has_" + std::get<0>(texture);
+			glUniform1i(glGetUniformLocation(program, texture_presence_var_name.c_str()), 1);
+		}*/
+
+		glUniform3fv(glGetUniformLocation(program, "diffuse_colour"), 1, glm::value_ptr(_constants.diffuse));
+		glUniform3fv(glGetUniformLocation(program, "specular_colour"), 1, glm::value_ptr(_constants.specular));
+		glUniform3fv(glGetUniformLocation(program, "ambient_colour"), 1, glm::value_ptr(_constants.ambient));
+		glUniform3fv(glGetUniformLocation(program, "emissive_colour"), 1, glm::value_ptr(_constants.emissive));
+		glUniform1f(glGetUniformLocation(program, "shininess_value"), _constants.shininess);
+		glUniform1f(glGetUniformLocation(program, "index_of_refraction_value"), _constants.indexOfRefraction);
+		glUniform1f(glGetUniformLocation(program, "opacity_value"), _constants.opacity);
+
+
+
+		glBindVertexArray(_vao);
+
+		unsigned int instanceVBO;
+		const unsigned int vertex_offset_index = 5;
+		glGenBuffers(1, &instanceVBO);
+		glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * positions.size(), static_cast<GLvoid const*>(positions.data()), GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glEnableVertexAttribArray(vertex_offset_index);
+		glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+		glVertexAttribPointer(vertex_offset_index, 3, GL_FLOAT, GL_FALSE, 0, (void*)0/*960*/);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glVertexAttribDivisor(vertex_offset_index, 1);
+
+
+
+		if (_has_indices)
+			glDrawElementsInstanced(_drawing_mode, _indices_nb, GL_UNSIGNED_INT, reinterpret_cast<GLvoid const*>(0x0), positions.size());
+		else
+			glDrawArrays(_drawing_mode, 0, _vertices_nb);
+		glBindVertexArray(0u);
+
+		/*for (auto const& texture : _textures) {
+			glBindTexture(std::get<2>(texture), 0);
+			glUniform1i(glGetUniformLocation(program, std::get<0>(texture).c_str()), 0);
+
+			std::string texture_presence_var_name = "has_" + std::get<0>(texture);
+			glUniform1i(glGetUniformLocation(program, texture_presence_var_name.c_str()), 0);
+		}*/
+
+		glUseProgram(0u);
+
+		utils::opengl::debug::endDebugGroup();
+	}
+
+public:
+	void render(glm::mat4 const& view_projection, std::vector<glm::vec3> const& positions) const {
+		if (_program != nullptr) {
+			render(view_projection, _transform.GetMatrix(), *_program, _set_uniforms, positions);
+		}
+	}
+
+	void set_program(GLuint const* const program, std::function<void(GLuint)> const& set_uniforms) {
+		if (program == nullptr) {
+			LogError("Program can not be a null pointer; this operation will be discarded.");
+			return;
+		}
+
+		_program = program;
+		_set_uniforms = set_uniforms;
+	}
+
+	void set_geometry(bonobo::mesh_data const& shape) {
+		_vao = shape.vao;
+		_vertices_nb = static_cast<GLsizei>(shape.vertices_nb);
+		_indices_nb = static_cast<GLsizei>(shape.indices_nb);
+		_drawing_mode = shape.drawing_mode;
+		_has_indices = shape.ibo != 0u;
+		_name = std::string("Render ") + shape.name;
+
+		_constants = shape.material;
+	}
+
+	TRSTransformf& get_transform()
+	{
+		return _transform;
+	}
+};
+
 edaf80::Fluid::Fluid(WindowManager& windowManager) :
 	mCamera(0.5f * glm::half_pi<float>(),
 		static_cast<float>(config::resolution_x) / static_cast<float>(config::resolution_y),
@@ -90,7 +234,7 @@ edaf80::Fluid::run()
 		glUniform3fv(glGetUniformLocation(program, "light_position"), 1, glm::value_ptr(light_position));
 		glUniform1f(glGetUniformLocation(program, "elapsed_time_s"), elapsed_time_s);
 		glUniform3fv(glGetUniformLocation(program, "camera_position"), 1, glm::value_ptr(camera_position));
-		};
+	};
 
 
 
@@ -108,16 +252,16 @@ edaf80::Fluid::run()
 
 	float PI = 3.14159265358979;
 
-	int num_particles = 3248;
+	int num_particles = 10000;
 	int sqrtN = sqrt(num_particles);
 	float time_step = 1 / 120.0;
 	float damping_factor = 0.95;
 	float width = 16.0f, height = 9.0f;
 	float half_width = width / 2, half_height = height / 2;
 	float gravity_strength = 10.0;
-	float smoothing_radius = 0.3;//1.2;
-	float target_density = 2.75;
-	float pressure_multiplier = 40.0;
+	float smoothing_radius = 0.272;//1.2;
+	float target_density = 77.5;
+	float pressure_multiplier = 64.0;
 	float near_pressure_multiplier = 2.0;
 	float viscosity_strength = 0.1;
 
@@ -129,7 +273,9 @@ edaf80::Fluid::run()
 	std::vector<Node> nodes;
 	std::vector<glm::vec3> positions, velocities;
 
-
+	ParticleRenderer particle_renderer;
+	particle_renderer.set_geometry(grid_sphere);
+	particle_renderer.set_program(&diffuse_shader, set_uniforms);
 
 	//float spacing = 3 * grid_sphere_radius;
 	glm::vec3 square_center = glm::vec3(width / 10, height / 10, 0.0);
@@ -194,20 +340,20 @@ edaf80::Fluid::run()
 	};
 
 	auto update_spatial = [&](std::vector<glm::vec3> &vec) -> void {
-		for (int i = 0; i < num_particles; i++) {
-			spatial[i] = {point_to_hash(vec[i]), i};
-		}
+		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+			spatial[i] = { point_to_hash(vec[i]), i };
+		});
 
 		sort(spatial.begin(), spatial.end());
 
 
 		std::fill(start_inds.begin(), start_inds.end(), -1);
 		start_inds[spatial[0].first] = 0;
-		for (int i = 1; i < num_particles; i++) {
+		concurrency::parallel_for(size_t(1), size_t(num_particles), [&](size_t i) {
 			if (spatial[i].first != spatial[i - 1].first) {
 				start_inds[spatial[i].first] = i;
 			}
-		}
+		});
 	};
 
 
@@ -394,32 +540,32 @@ edaf80::Fluid::run()
 
 
 	auto simulation_step = [&](float delta_time) -> void {
-		for (int i = 0; i < num_particles; i++) {
+		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			velocities[i] += glm::vec3(0.0, -1.0, 0.0) * gravity_strength * delta_time;
 			predicted_positions[i] = positions[i] + velocities[i] * delta_time;
-		}
+		});
 
 		update_spatial(predicted_positions);
 
-		for (int i = 0; i < num_particles; i++) {
+		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			densities[i] = calculate_density(predicted_positions[i]);
-		}
+		});
 
-		for (int i = 0; i < num_particles; i++) {
+		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			glm::vec3 pressure_force = calculate_pressure_force(i);
 			glm::vec3 pressure_acceleration = pressure_force / densities[i].first;
 			velocities[i] += pressure_acceleration * delta_time;
-		}
+		});
 
-		for (int i = 0; i < num_particles; i++) {
+		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			glm::vec3 viscosity_force = calculate_viscosity_force(i);
 			velocities[i] += viscosity_force * delta_time;
-		}
+		});
 
-		for (int i = 0; i < num_particles; i++) {
+		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			positions[i] += velocities[i] * delta_time;
 			handle_collision(i);
-		}
+		});
 	};
 
 
@@ -516,7 +662,7 @@ edaf80::Fluid::run()
 
 		float time_to_step;
 
-		//time_step = std::chrono::duration<float>(deltaTimeUs).count();
+		time_step = std::chrono::duration<float>(deltaTimeUs).count();
 		if (!shader_reload_failed) {
 			//
 			// Todo: Render all your geometry here.
@@ -532,11 +678,13 @@ edaf80::Fluid::run()
 			time_to_step = std::chrono::duration<float>(t1 - t0).count();
 
 
-			for (int i = 0; i < num_particles; i++) {
+			/*for (int i = 0; i < num_particles; i++) {
 				nodes[i].get_transform().SetTranslate(positions[i]);
 				nodes[i].render(mCamera.GetWorldToClipMatrix());
 				nodes[i].set_material_constants(speed_to_color(glm::l2Norm(velocities[i])));
-			}
+			}*/
+
+			particle_renderer.render(mCamera.GetWorldToClipMatrix(), positions);
 		}
 
 
@@ -561,8 +709,8 @@ edaf80::Fluid::run()
 
 			ImGui::SliderFloat("Damping factor", &damping_factor, 0.0f, 1.0f);
 			ImGui::SliderFloat("Gravity strength", &gravity_strength, 0.0f, 100.0f);
-			ImGui::SliderFloat("Smoothing radius", &smoothing_radius, grid_sphere_radius, 100.0f);
-			ImGui::SliderFloat("Time step", &time_step, 0.0f, 0.5f);
+			ImGui::SliderFloat("Smoothing radius", &smoothing_radius, grid_sphere_radius, 2.0f);
+			//ImGui::SliderFloat("Time step", &time_step, 0.0f, 0.5f);
 			ImGui::SliderFloat("Target_density", &target_density, 0.0f, 700.0f);
 			ImGui::SliderFloat("Pressure multiplier", &pressure_multiplier, 0.0f, 1000.0f);
 			ImGui::SliderFloat("Viscosity strength", &viscosity_strength, 0.0f, 1.0f);
