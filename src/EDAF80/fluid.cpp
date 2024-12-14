@@ -356,7 +356,29 @@ edaf80::Fluid::run()
 
 
 
+	auto speed_to_color = [](float speed) -> bonobo::material_data {
+		bonobo::material_data mat;
+		if (speed > 17) {
+			mat.diffuse = glm::vec3(1.0, 0.0, 0.0);
+		}
+		else if (speed > 12) {
+			mat.diffuse = glm::vec3(0.9, 0.3, 0.0);
+		}
+		else if (speed > 8) {
+			mat.diffuse = glm::vec3(0.7, 0.4, 0.0);
+		}
+		else if (speed > 5) {
+			mat.diffuse = glm::vec3(0.5, 0.5, 0.0);
+		}
+		else if (speed > 2) {
+			mat.diffuse = glm::vec3(0.0, 0.5, 0.5);
+		}
+		else {
+			mat.diffuse = glm::vec3(0.0, 0.6, 1.0);
+		}
 	
+		return mat;
+	};
 
 	glClearDepthf(1.0f);
 	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -445,6 +467,7 @@ edaf80::Fluid::run()
 			for (int i = 0; i < num_particles; i++) {
 				nodes[i].get_transform().SetTranslate(positions[i]);
 				nodes[i].render(mCamera.GetWorldToClipMatrix());
+				nodes[i].set_material_constants(speed_to_color(glm::l2Norm(velocities[i])));
 			}
 		}
 
