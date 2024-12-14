@@ -114,10 +114,11 @@ edaf80::Fluid::run()
 	float damping_factor = 0.95;
 	float width = 16.0f, height = 9.0f;
 	float half_width = width / 2, half_height = height / 2;
-	float gravity_strength = 0.0;
+	float gravity_strength = 10.0;
 	float smoothing_radius = 0.3;//1.2;
 	float target_density = 2.75;
 	float pressure_multiplier = 40.0;
+	float viscosity_strength = 0.1;
 
 	int PRIME1 = 86183;
 	int PRIME2 = 7475723;
@@ -127,7 +128,7 @@ edaf80::Fluid::run()
 	std::vector<Node> nodes;
 	std::vector<glm::vec3> positions, velocities;
 
-	
+
 
 	//float spacing = 3 * grid_sphere_radius;
 	glm::vec3 square_center = glm::vec3(width / 10, height / 10, 0.0);
@@ -230,6 +231,12 @@ edaf80::Fluid::run()
 		return (dist - r) * scale;
 	};
 
+	auto viscosity_smoothing_kernel = [&](float dist, float r) -> float {
+		float volume = PI * std::pow(r, 8.0) / 4.0;
+		float value = std::max(0.0f, r * r - dist * dist);
+		return value * value * value / volume;
+	};
+
 
 	const float mass = 1.0;
 	auto calculate_density = [&](glm::vec3 point) -> float {
@@ -330,6 +337,35 @@ edaf80::Fluid::run()
 	};
 
 
+	auto calculate_viscosity_force = [&](int idx) -> glm::vec3 {
+		glm::vec3 force = glm::vec3(0.0);
+		glm::vec3 point = predicted_positions[idx];
+
+		int hash = point_to_hash(point);
+
+		for (int i = -1; i <= 1; i++) {
+			for (int j = -1; j <= 1; j++) {
+				int cur_hash = hash + i * PRIME1 + j * PRIME2;
+				cur_hash = good_mod(cur_hash, num_particles);
+				int start_spatial_ind = start_inds[cur_hash];
+				if (start_spatial_ind == -1) continue;
+
+				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].first == cur_hash; spatial_ind++) {
+					int other_idx = spatial[spatial_ind].second;
+
+					//glm::vec3 offset = positions[other_idx] - point;
+					glm::vec3 offset = predicted_positions[other_idx] - point;
+					float dist = glm::l2Norm(offset);
+					float influence = viscosity_smoothing_kernel(dist, smoothing_radius);
+					force += (velocities[other_idx] - velocities[idx]) * influence;
+				}
+			}
+		}
+
+		return force * viscosity_strength;
+	};
+
+
 	auto simulation_step = [&](float delta_time) -> void {
 		for (int i = 0; i < num_particles; i++) {
 			velocities[i] += glm::vec3(0.0, -1.0, 0.0) * gravity_strength * delta_time;
@@ -346,6 +382,11 @@ edaf80::Fluid::run()
 			glm::vec3 pressure_force = calculate_pressure_force(i);
 			glm::vec3 pressure_acceleration = pressure_force / densities[i];
 			velocities[i] += pressure_acceleration * delta_time;
+		}
+
+		for (int i = 0; i < num_particles; i++) {
+			glm::vec3 viscosity_force = calculate_viscosity_force(i);
+			velocities[i] += viscosity_force * delta_time;
 		}
 
 		for (int i = 0; i < num_particles; i++) {
@@ -376,7 +417,7 @@ edaf80::Fluid::run()
 		else {
 			mat.diffuse = glm::vec3(0.0, 0.6, 1.0);
 		}
-	
+
 		return mat;
 	};
 
