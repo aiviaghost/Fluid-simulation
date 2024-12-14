@@ -538,6 +538,7 @@ edaf80::Fluid::run()
 			ImGui::SliderFloat("Time step", &time_step, 0.0f, 0.5f);
 			ImGui::SliderFloat("Target_density", &target_density, 0.0f, 700.0f);
 			ImGui::SliderFloat("Pressure multiplier", &pressure_multiplier, 0.0f, 1000.0f);
+			ImGui::SliderFloat("Viscosity strength", &viscosity_strength, 0.0f, 1.0f);
 		}
 		ImGui::End();
 
