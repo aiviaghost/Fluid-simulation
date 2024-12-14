@@ -118,6 +118,7 @@ edaf80::Fluid::run()
 	float smoothing_radius = 0.3;//1.2;
 	float target_density = 2.75;
 	float pressure_multiplier = 40.0;
+	float near_pressure_multiplier = 2.0;
 	float viscosity_strength = 0.1;
 
 	int PRIME1 = 86183;
@@ -155,7 +156,7 @@ edaf80::Fluid::run()
 
 
 	num_particles = positions.size();
-	std::vector<float> densities(num_particles);
+	std::vector<std::pair<float, float>> densities(num_particles);
 	std::vector<glm::vec3> predicted_positions(num_particles);
 
 	auto handle_collision = [&](int idx) -> void {
@@ -237,10 +238,26 @@ edaf80::Fluid::run()
 		return value * value * value / volume;
 	};
 
+	auto near_density_kernel = [&](float dist, float r) -> float {
+		if (dist >= r) return 0;
+		float v = r - dist;
+		float volume = PI * std::pow(r, 5) / 10;
+		return v * v * v / volume;
+	};
+
+	auto near_density_derivative = [&](float dist, float r) -> float {
+		if (dist >= r) return 0;
+		float v = r - dist;
+		float volume = PI * std::pow(r, 5) / 30;
+		return -v * v / volume;
+	};
+
 
 	const float mass = 1.0;
-	auto calculate_density = [&](glm::vec3 point) -> float {
+	auto calculate_density = [&](glm::vec3 point) -> std::pair<float, float> {
+
 		float density = 0.0;
+		float near_density = 0.0;
 
 		int hash = point_to_hash(point);
 
@@ -255,6 +272,8 @@ edaf80::Fluid::run()
 					float dist = glm::l2Norm(predicted_positions[spatial[spatial_ind].second] - point);
 					float influence = smoothing_kernel(dist, smoothing_radius);
 					density += mass * influence;
+
+					near_density += mass * near_density_kernel(dist, smoothing_radius);
 				}
 			}
 		}
@@ -265,19 +284,18 @@ edaf80::Fluid::run()
 			density += mass * influence;
 		}*/
 
-		return density;
+		return { density, near_density };
 	};
 
-
-	auto update_densities = [&]() -> void {
-		for (int i = 0; i < num_particles; i++) {
-			densities[i] = calculate_density(positions[i]);
-		}
-	};
 
 	auto density_to_pressure = [&](float density) -> float {
 		float density_error = density - target_density;
-		return density_error * pressure_multiplier;
+		float pressure = density_error * pressure_multiplier;
+		return pressure;
+	};
+
+	auto near_density_to_pressure = [&](float near_density) -> float {
+		return near_density * near_pressure_multiplier;
 	};
 
 	auto get_random_dir = [&]() -> glm::vec3 {
@@ -293,6 +311,8 @@ edaf80::Fluid::run()
 		glm::vec3 force = glm::vec3(0.0);
 		//glm::vec3 point = positions[idx];
 		glm::vec3 point = predicted_positions[idx];
+		float pressure = density_to_pressure(densities[idx].first);
+		float near_pressure = near_density_to_pressure(densities[idx].second);
 
 		int hash = point_to_hash(point);
 
@@ -312,9 +332,16 @@ edaf80::Fluid::run()
 					float dist = glm::l2Norm(offset);
 					glm::vec3 dir = dist == 0 ? get_random_dir() : offset / dist;
 					float slope = smoothing_kernel_derivative(dist, smoothing_radius);
-					float density = densities[other_idx];
-					float shared_pressure = calculcate_shared_pressure(density, densities[idx]);
-					force += shared_pressure * dir * slope * mass / density;
+					float other_density = densities[other_idx].first;
+					float other_near_density = densities[other_idx].second;
+
+					float other_pressure = density_to_pressure(other_density);
+					float other_near_pressure = near_density_to_pressure(other_near_density);
+
+					float shared_pressure = (pressure + other_pressure) * 0.5;
+					float shared_near_pressure = (near_pressure + other_near_pressure) * 0.5;
+					force += shared_pressure * dir * smoothing_kernel_derivative(dist, smoothing_radius) * mass / other_density;
+					force += shared_near_pressure * dir * near_density_derivative(dist, smoothing_radius) * mass / other_near_density;
 				}
 			}
 		}
@@ -380,7 +407,7 @@ edaf80::Fluid::run()
 
 		for (int i = 0; i < num_particles; i++) {
 			glm::vec3 pressure_force = calculate_pressure_force(i);
-			glm::vec3 pressure_acceleration = pressure_force / densities[i];
+			glm::vec3 pressure_acceleration = pressure_force / densities[i].first;
 			velocities[i] += pressure_acceleration * delta_time;
 		}
 
@@ -539,6 +566,7 @@ edaf80::Fluid::run()
 			ImGui::SliderFloat("Target_density", &target_density, 0.0f, 700.0f);
 			ImGui::SliderFloat("Pressure multiplier", &pressure_multiplier, 0.0f, 1000.0f);
 			ImGui::SliderFloat("Viscosity strength", &viscosity_strength, 0.0f, 1.0f);
+			ImGui::SliderFloat("Near pressure multiplier", &near_pressure_multiplier, 0.0f, 10.0f);
 		}
 		ImGui::End();
 
