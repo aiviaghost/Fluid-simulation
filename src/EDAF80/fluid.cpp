@@ -312,7 +312,7 @@ edaf80::Fluid::run()
 
 	std::cout << "X: " << glGetIntegeri_v << std::endl;
 	std::cout << "X: " << GL_MAX_COMPUTE_WORK_GROUP_COUNT  << std::endl;
-	
+
 
 	volatile float avg_density = 0;
 
@@ -379,7 +379,7 @@ edaf80::Fluid::run()
 		}
 	};
 
-	std::vector<std::pair<int, int>> spatial(num_particles);
+	std::vector<glm::ivec2> spatial(num_particles);
 	std::vector<int> start_inds(num_particles);
 
 	auto good_mod = [](int a, int m) -> int {
@@ -399,14 +399,14 @@ edaf80::Fluid::run()
 			spatial[i] = { point_to_hash(particles[i].predicted_position), i };
 		});
 
-		sort(spatial.begin(), spatial.end());
+		sort(spatial.begin(), spatial.end(), [](glm::ivec2 a, glm::ivec2 b) {return a.x < b.x || (a.x == b.x && a.y < b.y);});
 
 
 		std::fill(start_inds.begin(), start_inds.end(), -1);
-		start_inds[spatial[0].first] = 0;
+		start_inds[spatial[0].x] = 0;
 		concurrency::parallel_for(size_t(1), size_t(num_particles), [&](size_t i) {
-			if (spatial[i].first != spatial[i - 1].first) {
-				start_inds[spatial[i].first] = i;
+			if (spatial[i].x != spatial[i - 1].x) {
+				start_inds[spatial[i].x] = i;
 			}
 		});
 	};
@@ -468,9 +468,9 @@ edaf80::Fluid::run()
 				cur_hash = good_mod(cur_hash, num_particles);
 				int start_spatial_ind = start_inds[cur_hash];
 				if (start_spatial_ind == -1) continue;
-				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].first == cur_hash; spatial_ind++) {
+				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
 					//float dist = glm::l2Norm(positions[spatial[spatial_ind].second] - point);
-					float dist = glm::l2Norm(particles[spatial[spatial_ind].second].predicted_position - point);
+					float dist = glm::l2Norm(particles[spatial[spatial_ind].y].predicted_position - point);
 					float influence = smoothing_kernel(dist, smoothing_radius);
 					density += mass * influence;
 
@@ -524,8 +524,8 @@ edaf80::Fluid::run()
 				int start_spatial_ind = start_inds[cur_hash];
 				if (start_spatial_ind == -1) continue;
 
-				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].first == cur_hash; spatial_ind++) {
-					int other_idx = spatial[spatial_ind].second;
+				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
+					int other_idx = spatial[spatial_ind].y;
 					if (other_idx == idx) continue;
 
 					//glm::vec3 offset = positions[other_idx] - point;
@@ -578,8 +578,8 @@ edaf80::Fluid::run()
 				int start_spatial_ind = start_inds[cur_hash];
 				if (start_spatial_ind == -1) continue;
 
-				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].first == cur_hash; spatial_ind++) {
-					int other_idx = spatial[spatial_ind].second;
+				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
+					int other_idx = spatial[spatial_ind].y;
 
 					//glm::vec3 offset = positions[other_idx] - point;
 					glm::vec3 offset = particles[other_idx].predicted_position - point;
