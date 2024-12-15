@@ -15,6 +15,7 @@ layout (location = 2) in vec3 texcoords;
 layout (location = 3) in vec3 tangent;
 layout (location = 4) in vec3 binormal;
 layout (location = 5) in vec3 offset;
+layout (location = 6) in vec3 colour;
 
 uniform mat4 vertex_model_to_world;
 uniform mat4 normal_model_to_world;
@@ -32,6 +33,7 @@ uniform int has_opacity_texture;
 out VS_OUT {
 	vec3 vertex;
 	vec3 normal;
+	vec3 colour;
 } vs_out;
 
 
@@ -39,6 +41,6 @@ void main()
 {
 	vs_out.vertex = vec3(vertex_model_to_world * vec4(vertex + offset, 1.0));
 	vs_out.normal = vec3(normal_model_to_world * vec4(normal, 0.0));
-
+	vs_out.colour = colour;
 	gl_Position = vertex_world_to_clip * vertex_model_to_world * vec4(vertex + offset, 1.0);
 }

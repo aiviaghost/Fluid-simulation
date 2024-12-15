@@ -46,7 +46,7 @@ private:
 	// Debug data
 	std::string _name{ "Render un-named node" };
 
-	void render(glm::mat4 const& view_projection, glm::mat4& world, GLuint program, std::function<void(GLuint)> const& set_uniforms, std::vector<glm::vec3> const& positions) const {
+	void render(glm::mat4 const& view_projection, glm::mat4& world, GLuint program, std::function<void(GLuint)> const& set_uniforms, std::vector<glm::vec3> const& positions, std::vector<glm::vec3> const& colours) const {
 		if (_vao == 0u || program == 0u)
 			return;
 
@@ -108,6 +108,19 @@ private:
 		glVertexAttribDivisor(vertex_offset_index, 1);
 
 
+		const unsigned int colour_index = 6;
+		glGenBuffers(1, &instanceVBO);
+		glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * colours.size(), static_cast<GLvoid const*>(colours.data()), GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glEnableVertexAttribArray(colour_index);
+		glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+		glVertexAttribPointer(colour_index, 3, GL_FLOAT, GL_FALSE, 0, (void*)0/*960*/);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glVertexAttribDivisor(colour_index, 1);
+
+
 
 		if (_has_indices)
 			glDrawElementsInstanced(_drawing_mode, _indices_nb, GL_UNSIGNED_INT, reinterpret_cast<GLvoid const*>(0x0), positions.size());
@@ -129,9 +142,9 @@ private:
 	}
 
 public:
-	void render(glm::mat4 const& view_projection, std::vector<glm::vec3> const& positions) const {
+	void render(glm::mat4 const& view_projection, std::vector<glm::vec3> const& positions, std::vector<glm::vec3> const& colours) const {
 		if (_program != nullptr) {
-			render(view_projection, _transform.GetMatrix(), *_program, _set_uniforms, positions);
+			render(view_projection, _transform.GetMatrix(), *_program, _set_uniforms, positions, colours);
 		}
 	}
 
@@ -276,7 +289,7 @@ edaf80::Fluid::run()
 	volatile float avg_density = 0;
 
 	std::vector<Node> nodes;
-	std::vector<glm::vec3> positions, velocities;
+	std::vector<glm::vec3> positions, velocities, colours;
 
 	ParticleRenderer particle_renderer;
 	particle_renderer.set_geometry(grid_sphere);
@@ -296,6 +309,7 @@ edaf80::Fluid::run()
 
 			auto velocity = glm::vec3(0, 0, 0);
 			velocities.push_back(velocity);
+			colours.push_back(glm::vec3(0.0, 0.0, 1.0));
 
 			Node node;
 			node.set_geometry(grid_sphere);
@@ -578,28 +592,26 @@ edaf80::Fluid::run()
 
 
 
-	auto speed_to_color = [](float speed) -> bonobo::material_data {
+	auto speed_to_color = [](float speed) -> glm::vec3 {
 		bonobo::material_data mat;
 		if (speed > 17) {
-			mat.diffuse = glm::vec3(1.0, 0.0, 0.0);
+			return glm::vec3(1.0, 0.0, 0.0);
 		}
 		else if (speed > 12) {
-			mat.diffuse = glm::vec3(0.9, 0.3, 0.0);
+			return glm::vec3(0.9, 0.3, 0.0);
 		}
 		else if (speed > 8) {
-			mat.diffuse = glm::vec3(0.7, 0.4, 0.0);
+			return glm::vec3(0.7, 0.4, 0.0);
 		}
 		else if (speed > 5) {
-			mat.diffuse = glm::vec3(0.5, 0.5, 0.0);
+			return glm::vec3(0.5, 0.5, 0.0);
 		}
 		else if (speed > 2) {
-			mat.diffuse = glm::vec3(0.0, 0.5, 0.5);
+			return glm::vec3(0.0, 0.5, 0.5);
 		}
 		else {
-			mat.diffuse = glm::vec3(0.0, 0.6, 1.0);
+			return glm::vec3(0.0, 0.6, 1.0);
 		}
-
-		return mat;
 	};
 
 	glClearDepthf(1.0f);
@@ -686,13 +698,14 @@ edaf80::Fluid::run()
 			time_to_step = std::chrono::duration<float>(t1 - t0).count();
 
 
-			/*for (int i = 0; i < num_particles; i++) {
-				nodes[i].get_transform().SetTranslate(positions[i]);
+			for (int i = 0; i < num_particles; i++) {
+				colours[i] = speed_to_color(glm::l2Norm(velocities[i]));
+				/*nodes[i].get_transform().SetTranslate(positions[i]);
 				nodes[i].render(mCamera.GetWorldToClipMatrix());
-				nodes[i].set_material_constants(speed_to_color(glm::l2Norm(velocities[i])));
-			}*/
+				nodes[i].set_material_constants(speed_to_color(glm::l2Norm(velocities[i])));*/
+			}
 
-			particle_renderer.render(mCamera.GetWorldToClipMatrix(), positions);
+			particle_renderer.render(mCamera.GetWorldToClipMatrix(), positions, colours);
 		}
 
 
