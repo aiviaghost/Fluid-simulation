@@ -251,11 +251,12 @@ parametric_shapes::createSphere(float const radius,
 			tangents[index] = t;
 
 			// binormal
-			auto const b = glm::vec3(r * sin_theta * cos_phi, r * sin_phi, r * cos_theta * cos_phi);
+			auto const b = glm::normalize(glm::vec3(r * sin_theta * cos_phi, r * sin_phi, r * cos_theta * cos_phi));
 			binormals[index] = b;
 
 			// normal
 			auto const n = glm::cross(t, b);
+
 			normals[index] = n;
 
 			phi += d_phi;

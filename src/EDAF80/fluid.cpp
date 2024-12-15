@@ -160,6 +160,11 @@ public:
 	{
 		return _transform;
 	}
+
+	void set_material_constants(bonobo::material_data const& constants)
+	{
+		_constants = constants;
+	}
 };
 
 edaf80::Fluid::Fluid(WindowManager& windowManager) :
@@ -276,6 +281,9 @@ edaf80::Fluid::run()
 	ParticleRenderer particle_renderer;
 	particle_renderer.set_geometry(grid_sphere);
 	particle_renderer.set_program(&diffuse_shader, set_uniforms);
+	bonobo::material_data material;
+	material.diffuse = glm::vec3(0.0, 0.6, 1.0);
+	particle_renderer.set_material_constants(material);
 
 	//float spacing = 3 * grid_sphere_radius;
 	glm::vec3 square_center = glm::vec3(width / 10, height / 10, 0.0);
