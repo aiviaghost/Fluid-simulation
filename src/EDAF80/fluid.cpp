@@ -26,10 +26,14 @@
 
 struct Particle {
 	glm::vec3 position;
+	float padding0;
 	glm::vec3 predicted_position;
+	float padding1;
 	glm::vec3 velocity;
+	float padding2;
 	float density;
 	float near_density;
+	glm::vec2 padding3;
 };
 
 class ParticleRenderer {
@@ -239,6 +243,14 @@ edaf80::Fluid::run()
 		return;
 	}
 
+
+	GLuint predicted_position_shader = 0u;
+	program_manager.CreateAndRegisterComputeProgram("Predicted positions", "compute_shaders/predicted.comp", predicted_position_shader);
+	if (predicted_position_shader == 0u) {
+		LogError("Failed to load predicted position shader");
+		return;
+	}
+
 	//
 	// Todo: Insert the creation of other shader programs.
 	//       (Check how it was done in assignment 3.)
@@ -278,7 +290,8 @@ edaf80::Fluid::run()
 
 	float PI = 3.14159265358979;
 
-	int num_particles = 10000;
+	int num_particles = 16384;
+	int num_work_groups = num_particles / 1024;
 	int sqrtN = sqrt(num_particles);
 	float time_step = 1 / 60.0;
 	float damping_factor = 0.95;
@@ -582,10 +595,23 @@ edaf80::Fluid::run()
 
 
 	auto simulation_step = [&](float delta_time) -> void {
-		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+
+		GLuint ssbo;
+		glGenBuffers(1, &ssbo);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(Particle), particles.data(), GL_DYNAMIC_DRAW);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+
+		glUseProgram(predicted_position_shader);
+		glDispatchCompute(num_work_groups, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+
+		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			particles[i].velocity += glm::vec3(0.0, -1.0, 0.0) * gravity_strength * delta_time;
 			particles[i].predicted_position = particles[i].position + particles[i].velocity * delta_time;
-		});
+		});*/
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
 
 		update_spatial();
 
