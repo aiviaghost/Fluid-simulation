@@ -367,16 +367,6 @@ edaf80::Fluid::run()
 	int PRIME2 = 7475723;
 	int PRIME3 = 447409;
 
-	std::cout << "Max local size: " << GL_MAX_COMPUTE_WORK_GROUP_SIZE << std::endl;
-	std::cout << "Max local size product: " << GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS << std::endl;
-
-	std::cout << "X: " << glGetIntegeri_v << std::endl;
-	std::cout << "X: " << GL_MAX_COMPUTE_WORK_GROUP_COUNT << std::endl;
-
-
-	volatile float avg_density = 0;
-
-	std::vector<Node> nodes;
 	std::vector<glm::vec3> positions;
 	//std::vector<glm::vec3> velocities;
 	std::vector<glm::vec3> colours;
@@ -405,15 +395,6 @@ edaf80::Fluid::run()
 			//velocities.push_back(velocity);
 			colours.push_back(glm::vec3(0.0, 0.0, 1.0));
 			viscosity_forces.push_back(ViscosityForce());
-
-			Node node;
-			node.set_geometry(grid_sphere);
-			node.set_program(&diffuse_shader, set_uniforms);
-			node.get_transform().SetTranslate(pos);
-			bonobo::material_data material;
-			material.diffuse = glm::vec3(0.0, 0.6, 1.0);
-			node.set_material_constants(material);
-			nodes.push_back(node);
 		}
 	}
 
@@ -440,223 +421,10 @@ edaf80::Fluid::run()
 			particles[idx].position.y = -half_height + grid_sphere_radius;
 			particles[idx].velocity.y *= -1 * damping_factor;
 		}
-		};
+	};
 
 	std::vector<glm::ivec2> spatial(num_particles);
 	std::vector<int> start_inds(num_particles);
-
-	auto good_mod = [](int a, int m) -> int {
-		if (a >= 0) return a % m;
-		return (-(-a % m) + m) % m;
-		};
-
-	auto point_to_hash = [&](glm::vec3 point) -> int {
-		int x = (point.x / smoothing_radius);
-		int y = (point.y / smoothing_radius);
-		int hash = x * PRIME1 + y * PRIME2;
-		return good_mod(hash, num_particles);
-		};
-
-	auto update_spatial = [&]() -> void {
-		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-			spatial[i] = { point_to_hash(particles[i].predicted_position), i };
-			});
-
-		sort(spatial.begin(), spatial.end(), [](glm::ivec2 a, glm::ivec2 b) {return a.x < b.x || (a.x == b.x && a.y < b.y);});
-
-
-		std::fill(start_inds.begin(), start_inds.end(), -1);
-		start_inds[spatial[0].x] = 0;
-		concurrency::parallel_for(size_t(1), size_t(num_particles), [&](size_t i) {
-			if (spatial[i].x != spatial[i - 1].x) {
-				start_inds[spatial[i].x] = i;
-			}
-			});
-		};
-
-
-	auto smoothing_kernel = [&](float dist, float r) -> float {
-		/*float volume = PI * std::pow(r, 8.0) / 4.0;
-		float value = std::max(0.0f, r * r - dist * dist);
-		return value * value * value / volume;*/
-
-		if (dist >= r) return 0;
-		float volume = (PI * std::pow(r, 4)) / 6;
-		float x = r - dist;
-		return x * x / volume;
-		};
-
-	auto smoothing_kernel_derivative = [&](float dist, float r) -> float {
-		/*if (dist >= r) return 0;
-		float f = r * r - dist * dist;
-		float scale = -24 / (PI * std::pow(r, 8.0));
-		return scale * dist * f * f;*/
-		if (dist >= r) return 0;
-		float scale = 12 / (std::pow(r, 4) * PI);
-		return (dist - r) * scale;
-		};
-
-	auto viscosity_smoothing_kernel = [&](float dist, float r) -> float {
-		float volume = PI * std::pow(r, 8.0) / 4.0;
-		float value = std::max(0.0f, r * r - dist * dist);
-		return value * value * value / volume;
-		};
-
-	auto near_density_kernel = [&](float dist, float r) -> float {
-		if (dist >= r) return 0;
-		float v = r - dist;
-		float volume = PI * std::pow(r, 5) / 10;
-		return v * v * v / volume;
-		};
-
-	auto near_density_derivative = [&](float dist, float r) -> float {
-		if (dist >= r) return 0;
-		float v = r - dist;
-		float volume = PI * std::pow(r, 5) / 30;
-		return -v * v / volume;
-		};
-
-
-	const float mass = 1.0;
-	auto calculate_density = [&](glm::vec3 point) -> std::pair<float, float> {
-
-		float density = 0.0;
-		float near_density = 0.0;
-
-		int hash = point_to_hash(point);
-
-		for (int i = -1; i <= 1; i++) {
-			for (int j = -1; j <= 1; j++) {
-				int cur_hash = hash + i * PRIME1 + j * PRIME2;
-				cur_hash = good_mod(cur_hash, num_particles);
-				int start_spatial_ind = start_inds[cur_hash];
-				if (start_spatial_ind == -1) continue;
-				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
-					//float dist = glm::l2Norm(positions[spatial[spatial_ind].second] - point);
-					float dist = glm::l2Norm(particles[spatial[spatial_ind].y].predicted_position - point);
-					float influence = smoothing_kernel(dist, smoothing_radius);
-					density += mass * influence;
-
-					near_density += mass * near_density_kernel(dist, smoothing_radius);
-				}
-			}
-		}
-
-		/*for (int i = 0; i < num_particles; i++) {
-			float dist = glm::l2Norm(particles[i].predicted_position - point);
-			float influence = smoothing_kernel(dist, smoothing_radius);
-			density += mass * influence;
-			near_density += mass * near_density_kernel(dist, smoothing_radius);
-		}*/
-
-		return { density, near_density };
-		};
-
-
-	auto density_to_pressure = [&](float density) -> float {
-		float density_error = density - target_density;
-		float pressure = density_error * pressure_multiplier;
-		return pressure;
-		};
-
-	auto near_density_to_pressure = [&](float near_density) -> float {
-		return near_density * near_pressure_multiplier;
-		};
-
-	auto get_random_dir = [&]() -> glm::vec3 {
-		float theta = (rand() * 1.0f / RAND_MAX) * 2.0f * PI;
-		return glm::vec3(glm::cos(theta), glm::sin(theta), 0.0f);
-	};
-
-	auto calculcate_shared_pressure = [&](float a, float b) -> float {
-		return (density_to_pressure(a) + density_to_pressure(b)) * 0.5;
-		};
-
-	auto calculate_pressure_force = [&](int idx) -> glm::vec3 {
-		glm::vec3 force = glm::vec3(0.0);
-		//glm::vec3 point = positions[idx];
-		glm::vec3 point = particles[idx].predicted_position;
-		float pressure = density_to_pressure(densities[idx]);
-		float near_pressure = near_density_to_pressure(near_densities[idx]);
-
-		int hash = point_to_hash(point);
-
-		for (int i = -1; i <= 1; i++) {
-			for (int j = -1; j <= 1; j++) {
-				int cur_hash = hash + i * PRIME1 + j * PRIME2;
-				cur_hash = good_mod(cur_hash, num_particles);
-				int start_spatial_ind = start_inds[cur_hash];
-				if (start_spatial_ind == -1) continue;
-
-				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
-					int other_idx = spatial[spatial_ind].y;
-					if (other_idx == idx) continue;
-
-					//glm::vec3 offset = positions[other_idx] - point;
-					glm::vec3 offset = particles[other_idx].predicted_position - point;
-					float dist = glm::l2Norm(offset);
-					glm::vec3 dir = dist == 0 ? get_random_dir() : offset / dist;
-					float slope = smoothing_kernel_derivative(dist, smoothing_radius);
-					float other_density = densities[other_idx];
-					float other_near_density = near_densities[other_idx];
-
-					float other_pressure = density_to_pressure(other_density);
-					float other_near_pressure = near_density_to_pressure(other_near_density);
-
-					float shared_pressure = (pressure + other_pressure) * 0.5;
-					float shared_near_pressure = (near_pressure + other_near_pressure) * 0.5;
-					force += shared_pressure * dir * smoothing_kernel_derivative(dist, smoothing_radius) * mass / other_density;
-					force += shared_near_pressure * dir * near_density_derivative(dist, smoothing_radius) * mass / other_near_density;
-				}
-			}
-		}
-
-
-
-		/*for (int i = 0; i < num_particles; i++) {
-			if (i == idx) continue;
-
-			glm::vec3 offset = positions[i] - point;
-			float dist = glm::l2Norm(offset);
-			glm::vec3 dir = dist == 0 ? get_random_dir() : offset / dist;
-			float slope = smoothing_kernel_derivative(dist, smoothing_radius);
-			float density = densities[i];
-			float shared_pressure = calculcate_shared_pressure(density, densities[idx]);
-			force += shared_pressure * dir * slope * mass / density;
-		}*/
-
-		return force;
-		};
-
-
-	auto calculate_viscosity_force = [&](int idx) -> glm::vec3 {
-		glm::vec3 force = glm::vec3(0.0);
-		glm::vec3 point = particles[idx].predicted_position;
-
-		int hash = point_to_hash(point);
-
-		for (int i = -1; i <= 1; i++) {
-			for (int j = -1; j <= 1; j++) {
-				int cur_hash = hash + i * PRIME1 + j * PRIME2;
-				cur_hash = good_mod(cur_hash, num_particles);
-				int start_spatial_ind = start_inds[cur_hash];
-				if (start_spatial_ind == -1) continue;
-
-				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
-					int other_idx = spatial[spatial_ind].y;
-
-					//glm::vec3 offset = positions[other_idx] - point;
-					glm::vec3 offset = particles[other_idx].predicted_position - point;
-					float dist = glm::l2Norm(offset);
-					float influence = viscosity_smoothing_kernel(dist, smoothing_radius);
-					force += (particles[other_idx].velocity - particles[idx].velocity) * influence;
-				}
-			}
-		}
-
-		return force * viscosity_strength;
-		};
-
 
 	GLuint ssbo_particles;
 	glGenBuffers(1, &ssbo_particles);
@@ -695,10 +463,6 @@ edaf80::Fluid::run()
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, ssbo_viscosity_forces);
 
 	auto simulation_step = [&](float delta_time) -> void {
-
-
-
-
 		// Gravity and update predicted positions
 		glUseProgram(predicted_position_shader);
 		glUniform1f(glGetUniformLocation(predicted_position_shader, "gravity_strength"), gravity_strength);
@@ -816,7 +580,7 @@ edaf80::Fluid::run()
 		else {
 			return glm::vec3(0.0, 0.6, 1.0);
 		}
-		};
+	};
 
 	glClearDepthf(1.0f);
 	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -892,24 +656,16 @@ edaf80::Fluid::run()
 			//
 			// Todo: Render all your geometry here.
 			//
-			/*for (int i = 0; i < num_particles; i++) {
-				velocities[i] += glm::vec3(0.0, -gravity_strength, 0.0) * time_step;
-				predicted_positions[i] = positions[i] + velocities[i] * (1 / 120.0f);
-			}*/
-
+			
 			auto t0 = std::chrono::high_resolution_clock::now();
 			simulation_step(time_step);
 			auto t1 = std::chrono::high_resolution_clock::now();
 			time_to_step = std::chrono::duration<float>(t1 - t0).count();
 
-
 			concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 				colours[i] = speed_to_color(glm::l2Norm(particles[i].velocity));
 				positions[i] = particles[i].position;
-				/*nodes[i].get_transform().SetTranslate(positions[i]);
-				nodes[i].render(mCamera.GetWorldToClipMatrix());
-				nodes[i].set_material_constants(speed_to_color(glm::l2Norm(velocities[i])));*/
-				});
+			});
 
 			particle_renderer.render(mCamera.GetWorldToClipMatrix(), positions, colours);
 		}
@@ -923,7 +679,6 @@ edaf80::Fluid::run()
 		//
 		bool const opened = ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_None);
 		if (opened) {
-			ImGui::Text("Avg density: %.4f", avg_density / num_particles);
 			ImGui::Text("Time per frame:  %.10f", std::chrono::duration<float>(deltaTimeUs).count());
 			ImGui::Text("Time per update: %.10f", time_to_step);
 
