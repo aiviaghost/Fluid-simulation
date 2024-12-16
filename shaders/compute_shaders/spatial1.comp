@@ -12,19 +12,25 @@ struct Particle {
 	vec3 position;
 	vec3 predicted_position;
 	vec3 velocity;
-	float density;
-	float near_density;
 };
 
 layout(std430, binding = 0) buffer ParticleBuffer {
     Particle particles[];
 };
 
-layout(std430, binding = 1) buffer SpatialBuffer {
+layout(std430, binding = 1) buffer DensitiesBuffer {
+    float densities[];
+};
+
+layout(std430, binding = 2) buffer NearDensitiesBuffer {
+    float near_densities[];
+};
+
+layout(std430, binding = 3) buffer SpatialBuffer {
     ivec2 spatial[];
 };
 
-layout(std430, binding = 2) buffer StartBuffer {
+layout(std430, binding = 4) buffer StartBuffer {
     int start_inds[];
 };
 
