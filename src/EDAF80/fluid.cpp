@@ -656,84 +656,65 @@ edaf80::Fluid::run()
 		};
 
 
+	GLuint ssbo_particles;
+	glGenBuffers(1, &ssbo_particles);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(Particle), particles.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_particles);
+
+	GLuint ssbo_densities;
+	glGenBuffers(1, &ssbo_densities);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_densities);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(float), densities.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo_densities);
+
+	GLuint ssbo_near_densities;
+	glGenBuffers(1, &ssbo_near_densities);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_near_densities);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(float), near_densities.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo_near_densities);
+
+	GLuint ssbo_spatial;
+	glGenBuffers(1, &ssbo_spatial);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(glm::vec2), spatial.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo_spatial);
+
+	GLuint ssbo_start_inds;
+	glGenBuffers(1, &ssbo_start_inds);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_start_inds);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(int), start_inds.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, ssbo_start_inds);
+
+	GLuint ssbo_viscosity_forces;
+	glGenBuffers(1, &ssbo_viscosity_forces);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_viscosity_forces);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(ViscosityForce), viscosity_forces.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, ssbo_viscosity_forces);
+
 	auto simulation_step = [&](float delta_time) -> void {
 
-		GLuint ssbo_particles;
-		glGenBuffers(1, &ssbo_particles);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(Particle), particles.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_particles);
-
-		GLuint ssbo_densities;
-		glGenBuffers(1, &ssbo_densities);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_densities);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(float), densities.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo_densities);
-
-		GLuint ssbo_near_densities;
-		glGenBuffers(1, &ssbo_near_densities);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_near_densities);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(float), near_densities.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo_near_densities);
-
-		GLuint ssbo_spatial;
-		glGenBuffers(1, &ssbo_spatial);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(glm::vec2), spatial.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo_spatial);
-
-		GLuint ssbo_start_inds;
-		glGenBuffers(1, &ssbo_start_inds);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_start_inds);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(int), start_inds.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, ssbo_start_inds);
-
-		GLuint ssbo_viscosity_forces;
-		glGenBuffers(1, &ssbo_viscosity_forces);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_viscosity_forces);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(ViscosityForce), viscosity_forces.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, ssbo_viscosity_forces);
 
 
-		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-			particles[i].velocity += glm::vec3(0.0, -1.0, 0.0) * gravity_strength * delta_time;
-			particles[i].predicted_position = particles[i].position + particles[i].velocity * delta_time;
-		});*/
+
+		// Gravity and update predicted positions
 		glUseProgram(predicted_position_shader);
 		glUniform1f(glGetUniformLocation(predicted_position_shader, "gravity_strength"), gravity_strength);
 		glUniform1f(glGetUniformLocation(predicted_position_shader, "delta_time"), delta_time);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		////////////////////////////////////////////////////////////
 
 
 
-		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-			spatial[i] = { point_to_hash(particles[i].predicted_position), i };
-		});*/
+		// Spatial hashing step 1
 		glUseProgram(spatial1_shader);
 		glUniform1i(glGetUniformLocation(spatial1_shader, "num_particles"), num_particles);
 		glUniform1f(glGetUniformLocation(spatial1_shader, "smoothing_radius"), smoothing_radius);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		////////////////////////////////////////////////////////////
 
 
-
-		/*for (int k = 2; k <= num_particles; k *= 2) {
-			for (int j = k / 2; j > 0; j /= 2) {
-				for (int i = 0; i < num_particles; i++) {
-					int l = i ^ j;
-					if (l > i) {
-						if ((i & k) == 0 && spatial[i].x > spatial[l].x || (i & k) != 0 && spatial[i].x < spatial[l].x) {
-							std::swap(spatial[i], spatial[l]);
-						}
-					}
-				}
-			}
-		}*/
-		//std::fill(start_inds.begin(), start_inds.end(), -1);
-		//sort(spatial.begin(), spatial.end(), [](glm::ivec2 a, glm::ivec2 b) {return a.x < b.x || (a.x == b.x && a.y < b.y);});
+		// Bitonic sort
 		glUseProgram(bitonic_sort_shader);
 		for (int k = 2; k <= num_particles; k *= 2) {
 			for (int j = k / 2; j > 0; j /= 2) {
@@ -745,43 +726,26 @@ edaf80::Fluid::run()
 				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 			}
 		}
-		////////////////////////////////////////////////////////////
 
 
-
-
-		/*start_inds[spatial[0].x] = 0;
-		concurrency::parallel_for(size_t(1), size_t(num_particles), [&](size_t i) {
-		for(int i = 1; i < num_particles; i++)
-			if (spatial[i].x != spatial[i - 1].x) {
-				start_inds[spatial[i].x] = i;
-			}
-		});*/
+		// Spatial hashing last step
 		glUseProgram(spatial2_shader);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		////////////////////////////////////////////////////////////
 
-		
-		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-			std::pair<float, float> dens = calculate_density(particles[i].predicted_position);
-			densities[i] = dens.first;
-			near_densities[i] = dens.second;
-		});*/
-		
+
+
+		// Density
 		glUseProgram(density_shader);
 		glUniform1i(glGetUniformLocation(density_shader, "num_particles"), num_particles);
 		glUniform1f(glGetUniformLocation(density_shader, "smoothing_radius"), smoothing_radius);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		////////////////////////////////////////////////////////////
 
-		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-			glm::vec3 pressure_force = calculate_pressure_force(i);
-			glm::vec3 pressure_acceleration = pressure_force / densities[i];
-			particles[i].velocity += pressure_acceleration * delta_time;
-			});*/
 
+
+
+		// Pressure
 		glUseProgram(pressure_shader);
 		glUniform1i(glGetUniformLocation(pressure_shader, "num_particles"), num_particles);
 		glUniform1f(glGetUniformLocation(pressure_shader, "smoothing_radius"), smoothing_radius);
@@ -791,16 +755,10 @@ edaf80::Fluid::run()
 		glUniform1f(glGetUniformLocation(pressure_shader, "delta_time"), delta_time);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		////////////////////////////////////////////////////////////
 
 
-		//concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-		//	viscosity_forces[i] = calculate_viscosity_force(i);
-		//});
-		//concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-		//	particles[i].velocity += viscosity_forces[i].force * delta_time;
-		//});
 
+		// Viscosity
 		glUseProgram(viscosity_shader);
 		glUniform1i(glGetUniformLocation(viscosity_shader, "num_particles"), num_particles);
 		glUniform1f(glGetUniformLocation(viscosity_shader, "smoothing_radius"), smoothing_radius);
@@ -810,15 +768,14 @@ edaf80::Fluid::run()
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-
 		glUseProgram(viscosity_velocity_shader);
 		glUniform1f(glGetUniformLocation(viscosity_velocity_shader, "delta_time"), delta_time);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 
-		////////////////////////////////////////////////////////////
 
+		// Update position and check collision with wall
 		glUseProgram(update_position_shader);
 		glUniform1f(glGetUniformLocation(update_position_shader, "delta_time"), delta_time);
 		glUniform1f(glGetUniformLocation(update_position_shader, "half_width"), half_width);
@@ -828,24 +785,11 @@ edaf80::Fluid::run()
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
+
+		// Copy to particles vector for rendering
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
-		/*glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_densities);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(float), densities.data());
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_near_densities);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(float), near_densities.data());
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_start_inds);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(int), start_inds.data());
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(glm::vec2), spatial.data());
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_viscosity_forces);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(ViscosityForce), viscosity_forces.data());*/
-
-		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-			particles[i].position += particles[i].velocity * delta_time;
-			handle_collision(i);
-			});*/
-		};
+	};
 
 
 
@@ -976,7 +920,7 @@ edaf80::Fluid::run()
 		bool const opened = ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_None);
 		if (opened) {
 			ImGui::Text("Avg density: %.4f", avg_density / num_particles);
-			ImGui::Text("Time per frame: %.10f", std::chrono::duration<float>(deltaTimeUs).count());
+			ImGui::Text("Time per frame:  %.10f", std::chrono::duration<float>(deltaTimeUs).count());
 			ImGui::Text("Time per update: %.10f", time_to_step);
 
 			ImGui::Checkbox("Show basis", &show_basis);
