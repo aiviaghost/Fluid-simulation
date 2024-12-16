@@ -1,0 +1,100 @@
+#version 430 core
+
+layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+
+// ----------------------------------------------------------------------------
+//
+// uniforms
+//
+// ----------------------------------------------------------------------------
+
+struct Particle {
+	vec3 position;
+	vec3 predicted_position;
+	vec3 velocity;
+};
+
+struct ViscosityForce {
+	vec3 force;
+};
+
+layout(std430, binding = 0) buffer ParticleBuffer {
+    Particle particles[];
+};
+
+layout(std430, binding = 3) buffer SpatialBuffer {
+    ivec2 spatial[];
+};
+
+layout(std430, binding = 4) buffer StartBuffer {
+    int start_inds[];
+};
+
+layout(std430, binding = 5) buffer ViscosityForcesBuffer {
+    ViscosityForce viscosity_forces[];
+};
+
+uniform int num_particles;
+uniform float smoothing_radius;
+uniform float delta_time;
+uniform float target_density;
+uniform float viscosity_strength;
+int PRIME1 = 86183;
+int PRIME2 = 7475723;
+float PI = 3.14159265358979;
+float mass = 1.0;
+
+
+// ----------------------------------------------------------------------------
+//
+// functions
+//
+// ----------------------------------------------------------------------------
+
+
+int good_mod(int a, int m){
+	if (a >= 0) return a % m;
+	return (-(-a % m) + m) % m;
+}
+
+int point_to_hash(vec3 point){
+	int x = int(point.x / smoothing_radius);
+	int y = int(point.y / smoothing_radius);
+	int hash = x * PRIME1 + y * PRIME2;
+	return good_mod(hash, num_particles);
+}
+
+float viscosity_smoothing_kernel(float dist, float r) {
+	float volume = PI * pow(r, 8.0) / 4.0;
+	float value = max(0.0f, r * r - dist * dist);
+	return value * value * value / volume;
+}
+
+void main() {
+	uint id = gl_GlobalInvocationID.x;
+
+	vec3 force = vec3(0.0);
+	vec3 point = particles[id].predicted_position;
+
+	int hash = point_to_hash(point);
+
+	for (int i = -1; i <= 1; i++) {
+		for (int j = -1; j <= 1; j++) {
+			int cur_hash = hash + i * PRIME1 + j * PRIME2;
+			cur_hash = good_mod(cur_hash, num_particles);
+			int start_spatial_ind = start_inds[cur_hash];
+			if (start_spatial_ind == -1) continue;
+
+			for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
+				int other_idx = spatial[spatial_ind].y;
+
+				vec3 offset = particles[other_idx].predicted_position - point;
+				float dist = length(offset);
+				float influence = viscosity_smoothing_kernel(dist, smoothing_radius);
+				force += (particles[other_idx].velocity - particles[id].velocity) * influence;
+			}
+		}
+	}
+
+	viscosity_forces[id].force = force * viscosity_strength;
+}

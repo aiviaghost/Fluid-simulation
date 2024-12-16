@@ -33,6 +33,11 @@ struct Particle {
 	float padding2;
 };
 
+struct ViscosityForce {
+	glm::vec3 force;
+	float padding;
+};
+
 class ParticleRenderer {
 private:
 	// Geometry data
@@ -283,6 +288,20 @@ edaf80::Fluid::run()
 		return;
 	}
 
+	GLuint viscosity_shader = 0u;
+	program_manager.CreateAndRegisterComputeProgram("Viscosity", "compute_shaders/viscosity.comp", viscosity_shader);
+	if (viscosity_shader == 0u) {
+		LogError("Failed to load viscosity shader");
+		return;
+	}
+
+	GLuint viscosity_velocity_shader = 0u;
+	program_manager.CreateAndRegisterComputeProgram("Viscosity velocity", "compute_shaders/viscosity_velocity.comp", viscosity_velocity_shader);
+	if (viscosity_velocity_shader == 0u) {
+		LogError("Failed to load viscosity velocity shader");
+		return;
+	}
+
 	//
 	// Todo: Insert the creation of other shader programs.
 	//       (Check how it was done in assignment 3.)
@@ -353,6 +372,7 @@ edaf80::Fluid::run()
 	//std::vector<glm::vec3> velocities;
 	std::vector<glm::vec3> colours;
 	std::vector<Particle> particles;
+	std::vector<ViscosityForce> viscosity_forces;
 
 	ParticleRenderer particle_renderer;
 	particle_renderer.set_geometry(grid_sphere);
@@ -375,6 +395,7 @@ edaf80::Fluid::run()
 			auto velocity = glm::vec3(0, 0, 0);
 			//velocities.push_back(velocity);
 			colours.push_back(glm::vec3(0.0, 0.0, 1.0));
+			viscosity_forces.push_back(ViscosityForce());
 
 			Node node;
 			node.set_geometry(grid_sphere);
@@ -660,6 +681,11 @@ edaf80::Fluid::run()
 		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(int), start_inds.data(), GL_DYNAMIC_DRAW);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, ssbo_start_inds);
 
+		GLuint ssbo_viscosity_forces;
+		glGenBuffers(1, &ssbo_viscosity_forces);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_viscosity_forces);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(ViscosityForce), viscosity_forces.data(), GL_DYNAMIC_DRAW);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, ssbo_viscosity_forces);
 
 
 		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
@@ -761,6 +787,29 @@ edaf80::Fluid::run()
 		////////////////////////////////////////////////////////////
 
 
+		//concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+		//	viscosity_forces[i] = calculate_viscosity_force(i);
+		//});
+		//concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+		//	particles[i].velocity += viscosity_forces[i].force * delta_time;
+		//});
+
+		glUseProgram(viscosity_shader);
+		glUniform1i(glGetUniformLocation(viscosity_shader, "num_particles"), num_particles);
+		glUniform1f(glGetUniformLocation(viscosity_shader, "smoothing_radius"), smoothing_radius);
+		glUniform1f(glGetUniformLocation(viscosity_shader, "target_density"), target_density);
+		glUniform1f(glGetUniformLocation(viscosity_shader, "viscosity_strength"), viscosity_strength);
+		glUniform1f(glGetUniformLocation(viscosity_shader, "delta_time"), delta_time);
+		glDispatchCompute(num_work_groups, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+
+		glUseProgram(viscosity_velocity_shader);
+		glUniform1f(glGetUniformLocation(viscosity_velocity_shader, "delta_time"), delta_time);
+		glDispatchCompute(num_work_groups, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_densities);
@@ -771,13 +820,10 @@ edaf80::Fluid::run()
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(int), start_inds.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(glm::vec2), spatial.data());
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_viscosity_forces);
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(ViscosityForce), viscosity_forces.data());
+
 		////////////////////////////////////////////////////////////
-
-		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-			glm::vec3 viscosity_force = calculate_viscosity_force(i);
-			particles[i].velocity += viscosity_force * delta_time;
-			});
-
 		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			particles[i].position += particles[i].velocity * delta_time;
 			handle_collision(i);
