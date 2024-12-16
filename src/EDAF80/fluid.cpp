@@ -258,6 +258,13 @@ edaf80::Fluid::run()
 		return;
 	}
 
+	GLuint bitonic_sort_shader = 0u;
+	program_manager.CreateAndRegisterComputeProgram("Bitonic sort", "compute_shaders/bitonic_sort.comp", bitonic_sort_shader);
+	if (bitonic_sort_shader == 0u) {
+		LogError("Failed to load bitonic sort shader");
+		return;
+	}
+
 	//
 	// Todo: Insert the creation of other shader programs.
 	//       (Check how it was done in assignment 3.)
@@ -640,6 +647,34 @@ edaf80::Fluid::run()
 		glUseProgram(spatial1_shader);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		////////////////////////////////////////////////////////////
+
+
+
+		/*for (int k = 2; k <= num_particles; k *= 2) {
+			for (int j = k / 2; j > 0; j /= 2) {
+				for (int i = 0; i < num_particles; i++) {
+					int l = i ^ j;
+					if (l > i) {
+						if ((i & k) == 0 && spatial[i].x > spatial[l].x || (i & k) != 0 && spatial[i].x < spatial[l].x) {
+							std::swap(spatial[i], spatial[l]);
+						}
+					}
+				}
+			}
+		}*/
+		//sort(spatial.begin(), spatial.end(), [](glm::ivec2 a, glm::ivec2 b) {return a.x < b.x || (a.x == b.x && a.y < b.y);});
+		glUseProgram(bitonic_sort_shader);
+		for (int k = 2; k <= num_particles; k *= 2) {
+			for (int j = k / 2; j > 0; j /= 2) {
+				GLint kk = k;
+				GLint jj = j;
+				glUniform1i(glGetUniformLocation(bitonic_sort_shader, "k"), kk);
+				glUniform1i(glGetUniformLocation(bitonic_sort_shader, "j"), jj);
+				glDispatchCompute(num_work_groups, 1, 1);
+				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+			}
+		}
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
@@ -647,9 +682,8 @@ edaf80::Fluid::run()
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(int), start_inds.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(glm::vec2), spatial.data());
-		/////////////////////////////////////
 
-		sort(spatial.begin(), spatial.end(), [](glm::ivec2 a, glm::ivec2 b) {return a.x < b.x || (a.x == b.x && a.y < b.y);});
+
 
 		std::fill(start_inds.begin(), start_inds.end(), -1);
 		start_inds[spatial[0].x] = 0;
