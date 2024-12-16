@@ -265,6 +265,13 @@ edaf80::Fluid::run()
 		return;
 	}
 
+	GLuint spatial2_shader = 0u;
+	program_manager.CreateAndRegisterComputeProgram("Spatial 2", "compute_shaders/spatial2.comp", spatial2_shader);
+	if (spatial2_shader == 0u) {
+		LogError("Failed to load spatial 2 shader");
+		return;
+	}
+
 	//
 	// Todo: Insert the creation of other shader programs.
 	//       (Check how it was done in assignment 3.)
@@ -663,6 +670,7 @@ edaf80::Fluid::run()
 				}
 			}
 		}*/
+		//std::fill(start_inds.begin(), start_inds.end(), -1);
 		//sort(spatial.begin(), spatial.end(), [](glm::ivec2 a, glm::ivec2 b) {return a.x < b.x || (a.x == b.x && a.y < b.y);});
 		glUseProgram(bitonic_sort_shader);
 		for (int k = 2; k <= num_particles; k *= 2) {
@@ -675,6 +683,21 @@ edaf80::Fluid::run()
 				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 			}
 		}
+		////////////////////////////////////////////////////////////
+
+
+
+
+		/*start_inds[spatial[0].x] = 0;
+		concurrency::parallel_for(size_t(1), size_t(num_particles), [&](size_t i) {
+		for(int i = 1; i < num_particles; i++)
+			if (spatial[i].x != spatial[i - 1].x) {
+				start_inds[spatial[i].x] = i;
+			}
+		});*/
+		glUseProgram(spatial2_shader);
+		glDispatchCompute(num_work_groups, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
@@ -682,22 +705,7 @@ edaf80::Fluid::run()
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(int), start_inds.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(glm::vec2), spatial.data());
-
-
-
-		//std::fill(start_inds.begin(), start_inds.end(), -1);
-		start_inds[spatial[0].x] = 0;
-		concurrency::parallel_for(size_t(1), size_t(num_particles), [&](size_t i) {
-		for(int i = 1; i < num_particles; i++)
-			if (spatial[i].x != spatial[i - 1].x) {
-				start_inds[spatial[i].x] = i;
-			}
-		});
-
-
-		//update_spatial();
-
-
+		////////////////////////////////////////////////////////////
 
 
 
