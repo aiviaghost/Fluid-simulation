@@ -251,6 +251,13 @@ edaf80::Fluid::run()
 		return;
 	}
 
+	GLuint spatial1_shader = 0u;
+	program_manager.CreateAndRegisterComputeProgram("Spatial 1", "compute_shaders/spatial1.comp", spatial1_shader);
+	if (spatial1_shader == 0u) {
+		LogError("Failed to load spatial 1 shader");
+		return;
+	}
+
 	//
 	// Todo: Insert the creation of other shader programs.
 	//       (Check how it was done in assignment 3.)
@@ -596,24 +603,69 @@ edaf80::Fluid::run()
 
 	auto simulation_step = [&](float delta_time) -> void {
 
-		GLuint ssbo;
-		glGenBuffers(1, &ssbo);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+		GLuint ssbo_particles;
+		glGenBuffers(1, &ssbo_particles);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(Particle), particles.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_particles);
 
-		glUseProgram(predicted_position_shader);
-		glDispatchCompute(num_work_groups, 1, 1);
-		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		GLuint ssbo_spatial;
+		glGenBuffers(1, &ssbo_spatial);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(glm::vec2), spatial.data(), GL_DYNAMIC_DRAW);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo_spatial);
+
+		GLuint ssbo_start_inds;
+		glGenBuffers(1, &ssbo_start_inds);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_start_inds);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(int), start_inds.data(), GL_DYNAMIC_DRAW);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo_start_inds);
 
 
+		
 		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			particles[i].velocity += glm::vec3(0.0, -1.0, 0.0) * gravity_strength * delta_time;
 			particles[i].predicted_position = particles[i].position + particles[i].velocity * delta_time;
 		});*/
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
+		glUseProgram(predicted_position_shader);
+		glDispatchCompute(num_work_groups, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		////////////////////////////////////////////////////////////
 
-		update_spatial();
+
+
+		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+			spatial[i] = { point_to_hash(particles[i].predicted_position), i };
+		});*/
+		glUseProgram(spatial1_shader);
+		glDispatchCompute(num_work_groups, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_start_inds);
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(int), start_inds.data());
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(glm::vec2), spatial.data());
+		/////////////////////////////////////
+
+		sort(spatial.begin(), spatial.end(), [](glm::ivec2 a, glm::ivec2 b) {return a.x < b.x || (a.x == b.x && a.y < b.y);});
+
+		std::fill(start_inds.begin(), start_inds.end(), -1);
+		start_inds[spatial[0].x] = 0;
+		concurrency::parallel_for(size_t(1), size_t(num_particles), [&](size_t i) {
+		for(int i = 1; i < num_particles; i++)
+			if (spatial[i].x != spatial[i - 1].x) {
+				start_inds[spatial[i].x] = i;
+			}
+		});
+
+
+		//update_spatial();
+
+
+
+
 
 		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			std::pair<float, float> dens = calculate_density(particles[i].predicted_position);
@@ -626,7 +678,7 @@ edaf80::Fluid::run()
 			glm::vec3 pressure_acceleration = pressure_force / particles[i].density;
 			particles[i].velocity += pressure_acceleration * delta_time;
 		});
-
+		
 		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			glm::vec3 viscosity_force = calculate_viscosity_force(i);
 			particles[i].velocity += viscosity_force * delta_time;
