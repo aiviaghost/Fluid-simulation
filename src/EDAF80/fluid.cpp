@@ -219,7 +219,7 @@ void
 edaf80::Fluid::run()
 {
 	// Set up the camera
-	mCamera.mWorld.SetTranslate(glm::vec3(0.0f, 0.0f, 90.0f));
+	mCamera.mWorld.SetTranslate(glm::vec3(0.0f, 0.0f, -25.0f));
 	mCamera.mMouseSensitivity = glm::vec2(0.003f);
 	mCamera.mMovementSpeed = glm::vec3(3.0f); // 3 m/s => 10.8 km/h
 
@@ -323,8 +323,9 @@ edaf80::Fluid::run()
 
 	auto camera_position = mCamera.mWorld.GetTranslation();
 	mCamera.mWorld.LookTowards(glm::vec3(0, 0, 1));
+	mCamera.mWorld.LookAt(glm::vec3(0, 5, 0), glm::vec3(0, 1, 0));
 	float elapsed_time_s = 0.0f;
-	auto light_position = glm::vec3(-20.0f, 40.0f, -120.0f);
+	auto light_position = glm::vec3(-20.0f, 40.0f, -20.0f);
 
 	auto const set_uniforms = [&light_position, &elapsed_time_s, &camera_position](GLuint program) {
 		glUniform3fv(glGetUniformLocation(program, "light_position"), 1, glm::value_ptr(light_position));
@@ -353,8 +354,8 @@ edaf80::Fluid::run()
 	int sqrtN = sqrt(num_particles);
 	float time_step = 1 / 60.0;
 	float damping_factor = 0.95;
-	float width = 16.0f, height = 9.0f;
-	float half_width = width / 2, half_height = height / 2;
+	float width = 16.0f, height = 9.0f, depth = 16.0f;
+	float half_width = width / 2, half_height = height / 2, half_depth = depth / 2;;
 	float gravity_strength = 10.0;
 	float smoothing_radius = 0.272;//1.2;
 	float target_density = 77.5;
@@ -364,6 +365,7 @@ edaf80::Fluid::run()
 
 	int PRIME1 = 86183;
 	int PRIME2 = 7475723;
+	int PRIME3 = 447409;
 
 	std::cout << "Max local size: " << GL_MAX_COMPUTE_WORK_GROUP_SIZE << std::endl;
 	std::cout << "Max local size product: " << GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS << std::endl;
@@ -393,7 +395,7 @@ edaf80::Fluid::run()
 	float spacing = half_height / ((sqrtN - 1));
 	for (int i = 0; i < sqrtN; i++) {
 		for (int j = 0; j < sqrtN; j++) {
-			auto pos = glm::vec3(-half_height / 2 + i * spacing, -half_height / 2 + j * spacing, 100.0f) + square_center;
+			auto pos = glm::vec3(-half_height / 2 + i * spacing, -half_height / 2 + j * spacing, rand() * 1.0 / RAND_MAX) + square_center;
 			//auto pos = glm::vec3((rand() * 1.0f / RAND_MAX) * width - half_width, (rand() * 1.0f / RAND_MAX) * height - half_height, 100.0f);
 			positions.push_back(pos);
 			particles.push_back(Particle());
@@ -780,6 +782,7 @@ edaf80::Fluid::run()
 		glUniform1f(glGetUniformLocation(update_position_shader, "delta_time"), delta_time);
 		glUniform1f(glGetUniformLocation(update_position_shader, "half_width"), half_width);
 		glUniform1f(glGetUniformLocation(update_position_shader, "half_height"), half_height);
+		glUniform1f(glGetUniformLocation(update_position_shader, "half_depth"), half_depth);
 		glUniform1f(glGetUniformLocation(update_position_shader, "grid_sphere_radius"), grid_sphere_radius);
 		glUniform1f(glGetUniformLocation(update_position_shader, "damping_factor"), damping_factor);
 		glDispatchCompute(num_work_groups, 1, 1);
@@ -832,6 +835,7 @@ edaf80::Fluid::run()
 	while (!glfwWindowShouldClose(window)) {
 		half_width = width / 2;
 		half_height = height / 2;
+		half_depth = depth / 2;
 
 		auto const nowTime = std::chrono::high_resolution_clock::now();
 		auto const deltaTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(nowTime - lastTime);
@@ -927,8 +931,9 @@ edaf80::Fluid::run()
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);
 			ImGui::SliderFloat("Basis length scale", &basis_length_scale, 0.0f, 100.0f);
 
-			ImGui::SliderFloat("Bounding box width", &width, 10, 100);
-			ImGui::SliderFloat("Bounding box height", &height, 10, 100);
+			ImGui::SliderFloat("Bounding box width", &width, 1, 10);
+			ImGui::SliderFloat("Bounding box height", &height, 1, 10);
+			ImGui::SliderFloat("Bounding box depth", &depth, 1, 10);
 
 			ImGui::SliderFloat("Damping factor", &damping_factor, 0.0f, 1.0f);
 			ImGui::SliderFloat("Gravity strength", &gravity_strength, 0.0f, 100.0f);

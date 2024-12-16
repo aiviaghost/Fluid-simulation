@@ -42,6 +42,7 @@ uniform float pressure_multiplier;
 uniform float near_pressure_multiplier;
 int PRIME1 = 86183;
 int PRIME2 = 7475723;
+int PRIME3 = 447409;
 float PI = 3.14159265358979;
 float mass = 1.0;
 
@@ -61,7 +62,8 @@ int good_mod(int a, int m){
 int point_to_hash(vec3 point){
 	int x = int(point.x / smoothing_radius);
 	int y = int(point.y / smoothing_radius);
-	int hash = x * PRIME1 + y * PRIME2;
+	int z = int(point.z / smoothing_radius);
+	int hash = x * PRIME1 + y * PRIME2 + z * PRIME3;
 	return good_mod(hash, num_particles);
 }
 
@@ -100,33 +102,36 @@ void main() {
 
 	for (int i = -1; i <= 1; i++) {
 		for (int j = -1; j <= 1; j++) {
-			int cur_hash = hash + i * PRIME1 + j * PRIME2;
-			cur_hash = good_mod(cur_hash, num_particles);
-			int start_spatial_ind = start_inds[cur_hash];
-			if (start_spatial_ind == -1) continue;
+			for(int k = -1; k <= 1; k++) {
 
-			for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
-				int other_idx = spatial[spatial_ind].y;
-				if (other_idx == id) continue;
+				int cur_hash = hash + i * PRIME1 + j * PRIME2 + k * PRIME3;
+				cur_hash = good_mod(cur_hash, num_particles);
+				int start_spatial_ind = start_inds[cur_hash];
+				if (start_spatial_ind == -1) continue;
 
-				vec3 offset = particles[other_idx].predicted_position - point;
-				float dist = length(offset);
+				for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
+					int other_idx = spatial[spatial_ind].y;
+					if (other_idx == id) continue;
+
+					vec3 offset = particles[other_idx].predicted_position - point;
+					float dist = length(offset);
 
 
-				vec3 dir = dist == 0 ? vec3(cos(float(id)), sin(float(id)), 0.0) : offset / dist;
+					vec3 dir = dist == 0 ? vec3(cos(float(id)), sin(float(id)), 0.0) : offset / dist;
 
 
-				float slope = smoothing_kernel_derivative(dist, smoothing_radius);
-				float other_density = densities[other_idx];
-				float other_near_density = near_densities[other_idx];
+					float slope = smoothing_kernel_derivative(dist, smoothing_radius);
+					float other_density = densities[other_idx];
+					float other_near_density = near_densities[other_idx];
 
-				float other_pressure = density_to_pressure(other_density);
-				float other_near_pressure = near_density_to_pressure(other_near_density);
+					float other_pressure = density_to_pressure(other_density);
+					float other_near_pressure = near_density_to_pressure(other_near_density);
 
-				float shared_pressure = (pressure + other_pressure) * 0.5;
-				float shared_near_pressure = (near_pressure + other_near_pressure) * 0.5;
-				force += shared_pressure * dir * smoothing_kernel_derivative(dist, smoothing_radius) * mass / other_density;
-				force += shared_near_pressure * dir * near_density_derivative(dist, smoothing_radius) * mass / other_near_density;
+					float shared_pressure = (pressure + other_pressure) * 0.5;
+					float shared_near_pressure = (near_pressure + other_near_pressure) * 0.5;
+					force += shared_pressure * dir * smoothing_kernel_derivative(dist, smoothing_radius) * mass / other_density;
+					force += shared_near_pressure * dir * near_density_derivative(dist, smoothing_radius) * mass / other_near_density;
+				}
 			}
 		}
 	}

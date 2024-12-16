@@ -28,6 +28,7 @@ layout(std430, binding = 4) buffer StartBuffer {
 
 int PRIME1 = 86183;
 int PRIME2 = 7475723;
+int PRIME3 = 447409;
 uniform int num_particles;
 uniform float smoothing_radius;
 
@@ -47,7 +48,8 @@ int good_mod(int a, int m){
 int point_to_hash(vec3 point){
 	int x = int(point.x / smoothing_radius);
 	int y = int(point.y / smoothing_radius);
-	int hash = x * PRIME1 + y * PRIME2;
+	int z = int(point.z / smoothing_radius);
+	int hash = x * PRIME1 + y * PRIME2 + z * PRIME3;
 	return good_mod(hash, num_particles);
 }
 

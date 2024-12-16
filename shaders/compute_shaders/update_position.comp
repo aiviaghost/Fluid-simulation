@@ -21,6 +21,7 @@ layout(std430, binding = 0) buffer ParticleBuffer {
 uniform float delta_time;
 uniform float half_width;
 uniform float half_height;
+uniform float half_depth;
 uniform float grid_sphere_radius;
 uniform float damping_factor;
 
@@ -52,5 +53,13 @@ void main() {
 	if (particles[id].position.y - grid_sphere_radius < -half_height) {
 		particles[id].position.y = -half_height + grid_sphere_radius;
 		particles[id].velocity.y *= -1.0 * damping_factor;
+	}
+	if (particles[id].position.z + grid_sphere_radius > half_depth) {
+		particles[id].position.z = half_depth - grid_sphere_radius;
+		particles[id].velocity.z *= -1.0 * damping_factor;
+	}
+	if (particles[id].position.z - grid_sphere_radius < -half_depth) {
+		particles[id].position.z = -half_depth + grid_sphere_radius;
+		particles[id].velocity.z *= -1.0 * damping_factor;
 	}
 }
