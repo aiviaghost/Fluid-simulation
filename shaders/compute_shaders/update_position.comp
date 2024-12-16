@@ -1,0 +1,56 @@
+#version 430 core
+
+layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+
+// ----------------------------------------------------------------------------
+//
+// uniforms
+//
+// ----------------------------------------------------------------------------
+
+struct Particle {
+	vec3 position;
+	vec3 predicted_position;
+	vec3 velocity;
+};
+
+layout(std430, binding = 0) buffer ParticleBuffer {
+    Particle particles[];
+};
+
+uniform float delta_time;
+uniform float half_width;
+uniform float half_height;
+uniform float grid_sphere_radius;
+uniform float damping_factor;
+
+
+// ----------------------------------------------------------------------------
+//
+// functions
+//
+// ----------------------------------------------------------------------------
+
+
+void main() {
+	uint id = gl_GlobalInvocationID.x;
+
+	particles[id].position += particles[id].velocity * delta_time;
+	
+	if (particles[id].position.x + grid_sphere_radius > half_width) {
+		particles[id].position.x = half_width - grid_sphere_radius;
+		particles[id].velocity.x *= -1.0 * damping_factor;
+	}
+	if (particles[id].position.x - grid_sphere_radius < -half_width) {
+		particles[id].position.x = -half_width + grid_sphere_radius;
+		particles[id].velocity.x *= -1.0 * damping_factor;
+	}
+	if (particles[id].position.y + grid_sphere_radius > half_height) {
+		particles[id].position.y = half_height - grid_sphere_radius;
+		particles[id].velocity.y *= -1.0 * damping_factor;
+	}
+	if (particles[id].position.y - grid_sphere_radius < -half_height) {
+		particles[id].position.y = -half_height + grid_sphere_radius;
+		particles[id].velocity.y *= -1.0 * damping_factor;
+	}
+}

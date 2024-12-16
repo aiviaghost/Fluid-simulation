@@ -302,6 +302,13 @@ edaf80::Fluid::run()
 		return;
 	}
 
+	GLuint update_position_shader = 0u;
+	program_manager.CreateAndRegisterComputeProgram("Update position", "compute_shaders/update_position.comp", update_position_shader);
+	if (update_position_shader == 0u) {
+		LogError("Failed to load update_position shader");
+		return;
+	}
+
 	//
 	// Todo: Insert the creation of other shader programs.
 	//       (Check how it was done in assignment 3.)
@@ -810,9 +817,20 @@ edaf80::Fluid::run()
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 
+		////////////////////////////////////////////////////////////
+
+		glUseProgram(update_position_shader);
+		glUniform1f(glGetUniformLocation(update_position_shader, "delta_time"), delta_time);
+		glUniform1f(glGetUniformLocation(update_position_shader, "half_width"), half_width);
+		glUniform1f(glGetUniformLocation(update_position_shader, "half_height"), half_height);
+		glUniform1f(glGetUniformLocation(update_position_shader, "grid_sphere_radius"), grid_sphere_radius);
+		glUniform1f(glGetUniformLocation(update_position_shader, "damping_factor"), damping_factor);
+		glDispatchCompute(num_work_groups, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_densities);
+		/*glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_densities);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(float), densities.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_near_densities);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(float), near_densities.data());
@@ -821,13 +839,12 @@ edaf80::Fluid::run()
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(glm::vec2), spatial.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_viscosity_forces);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(ViscosityForce), viscosity_forces.data());
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(ViscosityForce), viscosity_forces.data());*/
 
-		////////////////////////////////////////////////////////////
-		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			particles[i].position += particles[i].velocity * delta_time;
 			handle_collision(i);
-			});
+			});*/
 		};
 
 
