@@ -24,6 +24,10 @@ layout(std430, binding = 1) buffer SpatialBuffer {
     ivec2 spatial[];
 };
 
+layout(std430, binding = 2) buffer StartBuffer {
+    int start_inds[];
+};
+
 float smoothing_radius = 0.272;
 int PRIME1 = 86183;
 int PRIME2 = 7475723;
@@ -44,4 +48,5 @@ int point_to_hash(vec3 point){
 void main() {
 	uint id = gl_GlobalInvocationID.x;
 	spatial[id] = ivec2(point_to_hash(particles[id].predicted_position), id);
+	start_inds[id] = -1;
 }

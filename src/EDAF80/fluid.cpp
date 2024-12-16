@@ -685,7 +685,7 @@ edaf80::Fluid::run()
 
 
 
-		std::fill(start_inds.begin(), start_inds.end(), -1);
+		//std::fill(start_inds.begin(), start_inds.end(), -1);
 		start_inds[spatial[0].x] = 0;
 		concurrency::parallel_for(size_t(1), size_t(num_particles), [&](size_t i) {
 		for(int i = 1; i < num_particles; i++)
