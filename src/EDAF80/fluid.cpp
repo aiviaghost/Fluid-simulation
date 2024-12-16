@@ -276,6 +276,13 @@ edaf80::Fluid::run()
 		return;
 	}
 
+	GLuint pressure_shader = 0u;
+	program_manager.CreateAndRegisterComputeProgram("Pressure", "compute_shaders/pressure.comp", pressure_shader);
+	if (pressure_shader == 0u) {
+		LogError("Failed to load pressure shader");
+		return;
+	}
+
 	//
 	// Todo: Insert the creation of other shader programs.
 	//       (Check how it was done in assignment 3.)
@@ -529,7 +536,7 @@ edaf80::Fluid::run()
 	auto get_random_dir = [&]() -> glm::vec3 {
 		float theta = (rand() * 1.0f / RAND_MAX) * 2.0f * PI;
 		return glm::vec3(glm::cos(theta), glm::sin(theta), 0.0f);
-		};
+	};
 
 	auto calculcate_shared_pressure = [&](float a, float b) -> float {
 		return (density_to_pressure(a) + density_to_pressure(b)) * 0.5;
@@ -728,6 +735,17 @@ edaf80::Fluid::run()
 		glUseProgram(density_shader);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		////////////////////////////////////////////////////////////
+
+		/*concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
+			glm::vec3 pressure_force = calculate_pressure_force(i);
+			glm::vec3 pressure_acceleration = pressure_force / densities[i];
+			particles[i].velocity += pressure_acceleration * delta_time;
+			});*/
+
+		glUseProgram(pressure_shader);
+		glDispatchCompute(num_work_groups, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_densities);
@@ -738,13 +756,7 @@ edaf80::Fluid::run()
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(int), start_inds.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_spatial);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(glm::vec2), spatial.data());
-		/////////////////////////////////////////
-
-		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-			glm::vec3 pressure_force = calculate_pressure_force(i);
-			glm::vec3 pressure_acceleration = pressure_force / densities[i];
-			particles[i].velocity += pressure_acceleration * delta_time;
-			});
+		////////////////////////////////////////////////////////////
 
 		concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
 			glm::vec3 viscosity_force = calculate_viscosity_force(i);

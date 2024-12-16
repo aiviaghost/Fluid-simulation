@@ -1,0 +1,143 @@
+#version 430 core
+
+layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+
+// ----------------------------------------------------------------------------
+//
+// uniforms
+//
+// ----------------------------------------------------------------------------
+
+struct Particle {
+	vec3 position;
+	vec3 predicted_position;
+	vec3 velocity;
+};
+
+layout(std430, binding = 0) buffer ParticleBuffer {
+    Particle particles[];
+};
+
+layout(std430, binding = 1) buffer DensitiesBuffer {
+    float densities[];
+};
+
+layout(std430, binding = 2) buffer NearDensitiesBuffer {
+    float near_densities[];
+};
+
+layout(std430, binding = 3) buffer SpatialBuffer {
+    ivec2 spatial[];
+};
+
+layout(std430, binding = 4) buffer StartBuffer {
+    int start_inds[];
+};
+
+int num_particles = 16384;
+float smoothing_radius = 0.272;
+int PRIME1 = 86183;
+int PRIME2 = 7475723;
+float PI = 3.14159265358979;
+float mass = 1.0;
+float delta_time = 1.0 / 60.0;
+float target_density = 77.5;
+float pressure_multiplier = 64.0;
+float near_pressure_multiplier = 2.0;
+
+int good_mod(int a, int m){
+	if (a >= 0) return a % m;
+	return (-(-a % m) + m) % m;
+}
+
+int point_to_hash(vec3 point){
+	int x = int(point.x / smoothing_radius);
+	int y = int(point.y / smoothing_radius);
+	int hash = x * PRIME1 + y * PRIME2;
+	return good_mod(hash, num_particles);
+}
+
+float smoothing_kernel(float dist, float r) {
+	if (dist >= r) return 0.0;
+	float volume = (PI * pow(r, 4.0)) / 6.0;
+	float x = r - dist;
+	return x * x / volume;
+}
+
+float near_density_kernel(float dist, float r) {
+	if (dist >= r) return 0.0;
+	float v = r - dist;
+	float volume = PI * pow(r, 5.0) / 10.0;
+	return v * v * v / volume;
+}
+
+float density_to_pressure(float density) {
+	float density_error = density - target_density;
+	float pressure = density_error * pressure_multiplier;
+	return pressure;
+}
+
+float near_density_to_pressure(float near_density) {
+	return near_density * near_pressure_multiplier;
+}
+
+float smoothing_kernel_derivative(float dist, float r) {
+	if (dist >= r) return 0.0;
+	float scale = 12.0 / (pow(r, 4.0) * PI);
+	return (dist - r) * scale;
+}
+
+float near_density_derivative(float dist, float r) {
+	if (dist >= r) return 0.0;
+	float v = r - dist;
+	float volume = PI * pow(r, 5.0) / 30.0;
+	return -v * v / volume;
+}
+
+void main() {
+	uint id = gl_GlobalInvocationID.x;
+
+	vec3 force = vec3(0.0);
+	vec3 point = particles[id].predicted_position;
+	float pressure = density_to_pressure(densities[id]);
+	float near_pressure = near_density_to_pressure(near_densities[id]);
+
+	int hash = point_to_hash(point);
+
+	for (int i = -1; i <= 1; i++) {
+		for (int j = -1; j <= 1; j++) {
+			int cur_hash = hash + i * PRIME1 + j * PRIME2;
+			cur_hash = good_mod(cur_hash, num_particles);
+			int start_spatial_ind = start_inds[cur_hash];
+			if (start_spatial_ind == -1) continue;
+
+			for (int spatial_ind = start_spatial_ind; spatial_ind < num_particles && spatial[spatial_ind].x == cur_hash; spatial_ind++) {
+				int other_idx = spatial[spatial_ind].y;
+				if (other_idx == id) continue;
+
+				vec3 offset = particles[other_idx].predicted_position - point;
+				float dist = length(offset);
+
+
+				vec3 dir = dist == 0 ? vec3(cos(float(id)), sin(float(id)), 0.0) : offset / dist;
+
+
+				float slope = smoothing_kernel_derivative(dist, smoothing_radius);
+				float other_density = densities[other_idx];
+				float other_near_density = near_densities[other_idx];
+
+				float other_pressure = density_to_pressure(other_density);
+				float other_near_pressure = near_density_to_pressure(other_near_density);
+
+				float shared_pressure = (pressure + other_pressure) * 0.5;
+				float shared_near_pressure = (near_pressure + other_near_pressure) * 0.5;
+				force += shared_pressure * dir * smoothing_kernel_derivative(dist, smoothing_radius) * mass / other_density;
+				force += shared_near_pressure * dir * near_density_derivative(dist, smoothing_radius) * mass / other_near_density;
+			}
+		}
+	}
+
+
+	vec3 pressure_acceleration = force / densities[id];
+	particles[id].velocity += pressure_acceleration * delta_time;
+}
