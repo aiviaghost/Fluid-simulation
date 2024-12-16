@@ -34,12 +34,20 @@ layout(std430, binding = 4) buffer StartBuffer {
     int start_inds[];
 };
 
-int num_particles = 16384;
-float smoothing_radius = 0.272;
+uniform int num_particles;
+uniform float smoothing_radius;
 int PRIME1 = 86183;
 int PRIME2 = 7475723;
 float PI = 3.14159265358979;
 float mass = 1.0;
+
+
+// ----------------------------------------------------------------------------
+//
+// functions
+//
+// ----------------------------------------------------------------------------
+
 
 int good_mod(int a, int m){
 	if (a >= 0) return a % m;

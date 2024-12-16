@@ -34,16 +34,24 @@ layout(std430, binding = 4) buffer StartBuffer {
     int start_inds[];
 };
 
-int num_particles = 16384;
-float smoothing_radius = 0.272;
+uniform int num_particles;
+uniform float smoothing_radius;
+uniform float delta_time;
+uniform float target_density;
+uniform float pressure_multiplier;
+uniform float near_pressure_multiplier;
 int PRIME1 = 86183;
 int PRIME2 = 7475723;
 float PI = 3.14159265358979;
 float mass = 1.0;
-float delta_time = 1.0 / 60.0;
-float target_density = 77.5;
-float pressure_multiplier = 64.0;
-float near_pressure_multiplier = 2.0;
+
+
+// ----------------------------------------------------------------------------
+//
+// functions
+//
+// ----------------------------------------------------------------------------
+
 
 int good_mod(int a, int m){
 	if (a >= 0) return a % m;
@@ -55,20 +63,6 @@ int point_to_hash(vec3 point){
 	int y = int(point.y / smoothing_radius);
 	int hash = x * PRIME1 + y * PRIME2;
 	return good_mod(hash, num_particles);
-}
-
-float smoothing_kernel(float dist, float r) {
-	if (dist >= r) return 0.0;
-	float volume = (PI * pow(r, 4.0)) / 6.0;
-	float x = r - dist;
-	return x * x / volume;
-}
-
-float near_density_kernel(float dist, float r) {
-	if (dist >= r) return 0.0;
-	float v = r - dist;
-	float volume = PI * pow(r, 5.0) / 10.0;
-	return v * v * v / volume;
 }
 
 float density_to_pressure(float density) {

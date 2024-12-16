@@ -667,6 +667,8 @@ edaf80::Fluid::run()
 			particles[i].predicted_position = particles[i].position + particles[i].velocity * delta_time;
 		});*/
 		glUseProgram(predicted_position_shader);
+		glUniform1f(glGetUniformLocation(predicted_position_shader, "gravity_strength"), gravity_strength);
+		glUniform1f(glGetUniformLocation(predicted_position_shader, "delta_time"), delta_time);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 		////////////////////////////////////////////////////////////
@@ -677,6 +679,8 @@ edaf80::Fluid::run()
 			spatial[i] = { point_to_hash(particles[i].predicted_position), i };
 		});*/
 		glUseProgram(spatial1_shader);
+		glUniform1i(glGetUniformLocation(spatial1_shader, "num_particles"), num_particles);
+		glUniform1f(glGetUniformLocation(spatial1_shader, "smoothing_radius"), smoothing_radius);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 		////////////////////////////////////////////////////////////
@@ -733,6 +737,8 @@ edaf80::Fluid::run()
 		});*/
 		
 		glUseProgram(density_shader);
+		glUniform1i(glGetUniformLocation(density_shader, "num_particles"), num_particles);
+		glUniform1f(glGetUniformLocation(density_shader, "smoothing_radius"), smoothing_radius);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 		////////////////////////////////////////////////////////////
@@ -744,8 +750,17 @@ edaf80::Fluid::run()
 			});*/
 
 		glUseProgram(pressure_shader);
+		glUniform1i(glGetUniformLocation(pressure_shader, "num_particles"), num_particles);
+		glUniform1f(glGetUniformLocation(pressure_shader, "smoothing_radius"), smoothing_radius);
+		glUniform1f(glGetUniformLocation(pressure_shader, "target_density"), target_density);
+		glUniform1f(glGetUniformLocation(pressure_shader, "pressure_multiplier"), pressure_multiplier);
+		glUniform1f(glGetUniformLocation(pressure_shader, "near_pressure_multiplier"), near_pressure_multiplier);
+		glUniform1f(glGetUniformLocation(pressure_shader, "delta_time"), delta_time);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		////////////////////////////////////////////////////////////
+
+
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_densities);
