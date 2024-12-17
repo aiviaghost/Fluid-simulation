@@ -38,6 +38,11 @@ struct ViscosityForce {
 	float padding;
 };
 
+struct Colour {
+	glm::vec3 colour;
+	float padding;
+};
+
 class ParticleRenderer {
 private:
 	// Geometry data
@@ -287,7 +292,7 @@ edaf80::Fluid::run()
 
 	float PI = 3.14159265358979;
 
-	int num_particles = 16384 * 4;
+	int num_particles = 16384 * 16;
 	int num_work_groups = num_particles / 1024;
 	int sqrtN = sqrt(num_particles);
 	float time_step = 1 / 60.0;
@@ -305,9 +310,8 @@ edaf80::Fluid::run()
 	int PRIME2 = 7475723;
 	int PRIME3 = 447409;
 
-	std::vector<glm::vec3> positions;
 	//std::vector<glm::vec3> velocities;
-	std::vector<glm::vec3> colours;
+	std::vector<Colour> colours;
 	std::vector<Particle> particles;
 	std::vector<ViscosityForce> viscosity_forces;
 
@@ -325,13 +329,12 @@ edaf80::Fluid::run()
 		for (int j = 0; j < sqrtN; j++) {
 			auto pos = glm::vec3(-half_height / 2 + i * spacing, -half_height / 2 + j * spacing, rand() * 1.0 / RAND_MAX) + square_center;
 			//auto pos = glm::vec3((rand() * 1.0f / RAND_MAX) * width - half_width, (rand() * 1.0f / RAND_MAX) * height - half_height, 100.0f);
-			positions.push_back(pos);
 			particles.push_back(Particle());
 			particles.back().position = pos;
 
 			auto velocity = glm::vec3(0, 0, 0);
 			//velocities.push_back(velocity);
-			colours.push_back(glm::vec3(0.0, 0.0, 1.0));
+			colours.push_back(Colour());
 			viscosity_forces.push_back(ViscosityForce());
 		}
 	}
@@ -341,25 +344,6 @@ edaf80::Fluid::run()
 	std::vector<float> densities(num_particles);
 	std::vector<float> near_densities(num_particles);
 	std::vector<glm::vec3> predicted_positions(num_particles);
-
-	auto handle_collision = [&](int idx) -> void {
-		if (particles[idx].position.x + grid_sphere_radius > half_width) {
-			particles[idx].position.x = half_width - grid_sphere_radius;
-			particles[idx].velocity.x *= -1 * damping_factor;
-		}
-		if (particles[idx].position.x - grid_sphere_radius < -half_width) {
-			particles[idx].position.x = -half_width + grid_sphere_radius;
-			particles[idx].velocity.x *= -1 * damping_factor;
-		}
-		if (particles[idx].position.y + grid_sphere_radius > half_height) {
-			particles[idx].position.y = half_height - grid_sphere_radius;
-			particles[idx].velocity.y *= -1 * damping_factor;
-		}
-		if (particles[idx].position.y - grid_sphere_radius < -half_height) {
-			particles[idx].position.y = -half_height + grid_sphere_radius;
-			particles[idx].velocity.y *= -1 * damping_factor;
-		}
-	};
 
 	std::vector<glm::ivec2> spatial(num_particles);
 	std::vector<int> start_inds(num_particles);
@@ -399,6 +383,12 @@ edaf80::Fluid::run()
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_viscosity_forces);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(ViscosityForce), viscosity_forces.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, ssbo_viscosity_forces);
+
+	GLuint ssbo_colours;
+	glGenBuffers(1, &ssbo_colours);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_colours);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(Colour), colours.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, ssbo_colours);
 
 	auto simulation_step = [&](float delta_time) -> void {
 		// Gravity and update predicted positions
@@ -529,6 +519,8 @@ edaf80::Fluid::run()
 	float basis_thickness_scale = 1.0f;
 	float basis_length_scale = 1.0f;
 
+	bool pause = false;
+
 	while (!glfwWindowShouldClose(window)) {
 		half_width = width / 2;
 		half_height = height / 2;
@@ -591,7 +583,9 @@ edaf80::Fluid::run()
 			//
 			
 			auto t0 = std::chrono::high_resolution_clock::now();
-			simulation_step(time_step);
+			if (!pause) {
+				simulation_step(time_step);
+			}
 			auto t1 = std::chrono::high_resolution_clock::now();
 			time_to_step = std::chrono::duration<float>(t1 - t0).count();
 
@@ -609,6 +603,8 @@ edaf80::Fluid::run()
 		if (opened) {
 			ImGui::Text("Time per frame:  %.10f", std::chrono::duration<float>(deltaTimeUs).count());
 			ImGui::Text("Time per update: %.10f", time_to_step);
+
+			ImGui::Checkbox("Pause simulation", &pause);
 
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);

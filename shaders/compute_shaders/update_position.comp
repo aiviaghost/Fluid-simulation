@@ -14,8 +14,16 @@ struct Particle {
 	vec3 velocity;
 };
 
+struct Colour {
+	vec3 colour;
+};
+
 layout(std430, binding = 0) buffer ParticleBuffer {
     Particle particles[];
+};
+
+layout(std430, binding = 6) buffer ColourBuffer {
+    Colour colours[];
 };
 
 uniform float delta_time;
@@ -61,5 +69,31 @@ void main() {
 	if (particles[id].position.z - grid_sphere_radius < -half_depth) {
 		particles[id].position.z = -half_depth + grid_sphere_radius;
 		particles[id].velocity.z *= -1.0 * damping_factor;
+	}
+
+
+
+
+
+
+	// Colour
+	float speed = length(particles[id].velocity);
+	if (speed > 17) {
+		colours[id].colour = vec3(1.0, 0.0, 0.0);
+	}
+	else if (speed > 12) {
+		colours[id].colour = vec3(0.9, 0.3, 0.0);
+	}
+	else if (speed > 8) {
+		colours[id].colour = vec3(0.7, 0.4, 0.0);
+	}
+	else if (speed > 5) {
+		colours[id].colour = vec3(0.5, 0.5, 0.0);
+	}
+	else if (speed > 2) {
+		colours[id].colour = vec3(0.0, 0.5, 0.5);
+	}
+	else {
+		colours[id].colour = vec3(0.0, 0.6, 1.0);
 	}
 }

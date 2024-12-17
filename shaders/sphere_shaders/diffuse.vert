@@ -21,8 +21,16 @@ struct Particle {
 	vec3 velocity;
 };
 
+struct Colour {
+	vec3 colour;
+};
+
 layout(std430, binding = 0) buffer ParticleBuffer {
     Particle particles[];
+};
+
+layout(std430, binding = 6) buffer ColourBuffer {
+    Colour colours[];
 };
 
 uniform mat4 vertex_model_to_world;
@@ -50,5 +58,6 @@ void main()
 	vec3 offset = particles[gl_InstanceID].position;
 	vs_out.vertex = vec3(vertex_model_to_world * vec4(vertex + offset, 1.0));
 	vs_out.normal = vec3(normal_model_to_world * vec4(normal, 0.0));
+	vs_out.colour = colours[gl_InstanceID].colour;
 	gl_Position = vertex_world_to_clip * vertex_model_to_world * vec4(vertex + offset, 1.0);
 }
