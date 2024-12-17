@@ -358,7 +358,7 @@ edaf80::Fluid::run()
 
 	float PI = 3.14159265358979;
 
-	int num_particles = 16384 * 16;
+	int num_particles = 16384 * 4;
 	int num_work_groups = num_particles / 1024;
 	int sqrtN = sqrt(num_particles);
 	float time_step = 1 / 60.0;
@@ -371,8 +371,8 @@ edaf80::Fluid::run()
 	float pressure_multiplier = 64.0;
 	float near_pressure_multiplier = 2.0;
 	float viscosity_strength = 0.1;
-	float step_size = 0.1;
-	float density_multiplier = 0.1;
+	float step_size = 0.05;
+	float density_multiplier = 0.01;
 
 	int PRIME1 = 86183;
 	int PRIME2 = 7475723;
@@ -739,7 +739,7 @@ edaf80::Fluid::run()
 			ImGui::SliderFloat("Viscosity strength", &viscosity_strength, 0.0f, 1.0f);
 			ImGui::SliderFloat("Near pressure multiplier", &near_pressure_multiplier, 0.0f, 10.0f);
 			ImGui::SliderFloat("Ray march step size", &step_size, 0.01f, 0.5f);
-			ImGui::SliderFloat("Ray march density multiplier", &density_multiplier, 0.01f, 1.0f);
+			ImGui::SliderFloat("Ray march density multiplier", &density_multiplier, 0.001f, 0.1f);
 		}
 		ImGui::End();
 

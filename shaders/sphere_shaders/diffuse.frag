@@ -16,5 +16,4 @@ void main()
 	vec3 L = normalize(light_position - fs_in.vertex);
 	frag_color = vec4(fs_in.colour, 1.0) * clamp(dot(normalize(fs_in.normal), L), 0.0, 1.0);
 	frag_color = vec4(fs_in.colour, 1.0);
-	frag_color = vec4(gl_FragCoord.xy, 0.0, 1.0);
 }

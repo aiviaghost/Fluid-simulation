@@ -35,6 +35,8 @@ float mass = 1.0;
 uniform float half_width;
 uniform float half_height;
 uniform float half_depth;
+uniform float step_size;
+uniform float density_multiplier;
 
 uniform vec3 light_position;
 uniform vec3 diffuse_colour;
@@ -191,5 +193,16 @@ void main()
 	if(inter.y > 0){
 		frag_color = vec4(1.0);
 	}
+
+	float tot_density = 0.0;
+
+	if(inter.x < 0) inter.x = 0;
+	for(float lambda = inter.x + eps; lambda < inter.y - eps; lambda += step_size){
+		vec3 point = orig + lambda * dir;
+		float density = calculate_density(point) * density_multiplier * step_size;
+		tot_density += density;
+	}
+
+	frag_color = vec4(vec3(tot_density), 1.0);
 
 }
