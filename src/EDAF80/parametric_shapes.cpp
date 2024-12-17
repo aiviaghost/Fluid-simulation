@@ -156,3 +156,81 @@ parametric_shapes::createSphere(float const radius,
 
 	return data;
 }
+
+
+bonobo::mesh_data parametric_shapes::createHighTesselationQuad(
+	float const width, float const height,
+	unsigned int const horizontal_split_count,
+	unsigned int const vertical_split_count) {
+
+	int num_tris = horizontal_split_count * 2 * vertical_split_count;
+	auto index_sets = std::vector<glm::uvec3>(0);
+
+	int n = horizontal_split_count + 1;
+	int m = vertical_split_count + 1;
+	//std::swap(n, m);
+	int vertices_nb = n * m;
+
+	auto vertices = std::vector<glm::vec3>(vertices_nb);
+	auto texcoords = std::vector<glm::vec3>(vertices_nb);
+
+	for (int i = 0; i < n; i++) {
+		for (int j = 0; j < m; j++) {
+			float s = i * height;
+			float t = j * width;
+
+			int ind = j + i * m;
+			vertices[ind] = glm::vec3(s, t, 0.0);
+			texcoords[ind] = glm::vec3((1.0 * i) / (1.0 * vertical_split_count), (1.0 * j) / horizontal_split_count, 0.0);
+
+
+			if (i < n - 1 && j < m - 1) {
+				index_sets.push_back(glm::vec3(ind, ind + 1, ind + 1 + m));
+				index_sets.push_back(glm::vec3(ind, ind + 1 + m, ind + m));
+			}
+		}
+	}
+
+
+
+	bonobo::mesh_data data;
+	glGenVertexArrays(1, &data.vao);
+	assert(data.vao != 0u);
+	glBindVertexArray(data.vao);
+
+	auto const vertices_offset = 0u;
+	auto const vertices_size = static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3));
+
+	auto const texcoords_offset = vertices_size;
+	auto const texcoords_size = static_cast<GLsizeiptr>(texcoords.size() * sizeof(glm::vec3));
+
+	auto const bo_size = static_cast<GLsizeiptr>(vertices_size + texcoords_size);
+
+
+	glGenBuffers(1, &data.bo);
+	assert(data.bo != 0u);
+	glBindBuffer(GL_ARRAY_BUFFER, data.bo);
+	glBufferData(GL_ARRAY_BUFFER, bo_size, nullptr, GL_STATIC_DRAW);
+
+	glBufferSubData(GL_ARRAY_BUFFER, vertices_offset, vertices_size, static_cast<GLvoid const*>(vertices.data()));
+	glEnableVertexAttribArray(static_cast<unsigned int>(bonobo::shader_bindings::vertices));
+	glVertexAttribPointer(static_cast<unsigned int>(bonobo::shader_bindings::vertices), 3, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<GLvoid const*>(0x0));
+
+	glBufferSubData(GL_ARRAY_BUFFER, texcoords_offset, texcoords_size, static_cast<GLvoid const*>(texcoords.data()));
+	glEnableVertexAttribArray(static_cast<unsigned int>(bonobo::shader_bindings::texcoords));
+	glVertexAttribPointer(static_cast<unsigned int>(bonobo::shader_bindings::texcoords), 3, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<GLvoid const*>(texcoords_offset));
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0u);
+
+	data.indices_nb = static_cast<GLsizei>(index_sets.size() * 3u);
+	glGenBuffers(1, &data.ibo);
+	assert(data.ibo != 0u);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, data.ibo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(index_sets.size() * sizeof(glm::vec3)), reinterpret_cast<GLvoid const*>(index_sets.data()), GL_STATIC_DRAW);
+
+	glBindVertexArray(0u);
+	//glBindBuffer(GL_ARRAY_BUFFER, 0u);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0u);
+
+	return data;
+}

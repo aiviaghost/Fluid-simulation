@@ -1,6 +1,4 @@
-#version 430 core
-
-layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+#version 430
 
 // ----------------------------------------------------------------------------
 //
@@ -16,14 +14,6 @@ struct Particle {
 
 layout(std430, binding = 0) buffer ParticleBuffer {
     Particle particles[];
-};
-
-layout(std430, binding = 1) buffer DensitiesBuffer {
-    float densities[];
-};
-
-layout(std430, binding = 2) buffer NearDensitiesBuffer {
-    float near_densities[];
 };
 
 layout(std430, binding = 3) buffer SpatialBuffer {
@@ -42,6 +32,24 @@ int PRIME3 = 447409;
 float PI = 3.14159265358979;
 float mass = 1.0;
 
+uniform float half_width;
+uniform float half_height;
+uniform float half_depth;
+
+uniform vec3 light_position;
+uniform vec3 diffuse_colour;
+uniform mat4 vertex_clip_to_world;
+uniform vec3 camera_position;
+
+in VS_OUT {
+	vec3 vertex;
+	vec3 normal;
+	vec3 colour;
+	vec3 texcoords;
+} fs_in;
+
+
+out vec4 frag_color;
 
 // ----------------------------------------------------------------------------
 //
@@ -77,9 +85,8 @@ float near_density_kernel(float dist, float r) {
 	return v * v * v / volume;
 };
 
-vec2 calculate_density(vec3 point) {
+float calculate_density(vec3 point) {
 	float density = 0.0;
-	float near_density = 0.0;
 
 	int hash = point_to_hash(point);
 
@@ -94,22 +101,29 @@ vec2 calculate_density(vec3 point) {
 					float dist = length(particles[spatial[spatial_ind].y].predicted_position - point);
 
 					density += mass * smoothing_kernel(dist, smoothing_radius);
-					near_density += mass * near_density_kernel(dist, smoothing_radius);
 				}
 			}
 		}
 	}
 
-	return vec2(density, near_density);
+	return density;
 }
 
-void main() {
-	uint id = gl_GlobalInvocationID.x;
 
-	vec3 point = particles[id].predicted_position;
 
-	vec2 res = calculate_density(point);
+void main()
+{
+	vec3 L = normalize(light_position - fs_in.vertex);
+	frag_color = vec4(fs_in.colour, 1.0) * clamp(dot(normalize(fs_in.normal), L), 0.0, 1.0);
+	frag_color = vec4(fs_in.colour, 1.0);
+	frag_color = vec4(gl_FragCoord.xy, 0.0, 1.0);
+	frag_color = vec4(fs_in.texcoords.xy, 0.0, 1.0);
 
-	densities[id] = res.x;
-	near_densities[id] = res.y;
+	vec2 uv = fs_in.texcoords.xy * 2.0 - 1.0;
+	vec4 clip_space = vec4(uv, -1.0, 1.0);
+	vec4 world_space = vertex_clip_to_world * clip_space;
+	world_space /= world_space.w;
+
+	vec3 ray_origin = camera_position;
+	vec3 ray_dir = normalize(world_space.xyz - ray_origin);
 }

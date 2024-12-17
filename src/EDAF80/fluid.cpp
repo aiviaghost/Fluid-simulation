@@ -65,7 +65,7 @@ private:
 	// Debug data
 	std::string _name{ "Render un-named node" };
 
-	void render(glm::mat4 const& view_projection, glm::mat4& world, GLuint program, std::function<void(GLuint)> const& set_uniforms, int num_particles) const {
+	void render(glm::mat4 const& view_projection, glm::mat4 const& view_projection_inv, glm::mat4& world, GLuint program, std::function<void(GLuint)> const& set_uniforms, int num_particles) const {
 		if (_vao == 0u || program == 0u)
 			return;
 
@@ -80,6 +80,8 @@ private:
 		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_model_to_world"), 1, GL_FALSE, glm::value_ptr(world));
 		glUniformMatrix4fv(glGetUniformLocation(program, "normal_model_to_world"), 1, GL_FALSE, glm::value_ptr(normal_model_to_world));
 		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_world_to_clip"), 1, GL_FALSE, glm::value_ptr(view_projection));
+		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_clip_to_world"), 1, GL_FALSE, glm::value_ptr(view_projection_inv));
+		
 
 		glUniform3fv(glGetUniformLocation(program, "diffuse_colour"), 1, glm::value_ptr(_constants.diffuse));
 		glUniform3fv(glGetUniformLocation(program, "specular_colour"), 1, glm::value_ptr(_constants.specular));
@@ -104,10 +106,57 @@ private:
 		utils::opengl::debug::endDebugGroup();
 	}
 
+	void render2(glm::mat4 const& view_projection, glm::mat4 const& view_projection_inv, glm::mat4& world, GLuint program, std::function<void(GLuint)> const& set_uniforms) const {
+		if (_vao == 0u || program == 0u)
+			return;
+
+		utils::opengl::debug::beginDebugGroup(_name);
+
+		glUseProgram(program);
+
+		auto const normal_model_to_world = glm::transpose(glm::inverse(world));
+
+		set_uniforms(program);
+
+		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_model_to_world"), 1, GL_FALSE, glm::value_ptr(world));
+		glUniformMatrix4fv(glGetUniformLocation(program, "normal_model_to_world"), 1, GL_FALSE, glm::value_ptr(normal_model_to_world));
+		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_world_to_clip"), 1, GL_FALSE, glm::value_ptr(view_projection));
+		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_clip_to_world"), 1, GL_FALSE, glm::value_ptr(view_projection_inv));
+
+
+		glUniform3fv(glGetUniformLocation(program, "diffuse_colour"), 1, glm::value_ptr(_constants.diffuse));
+		glUniform3fv(glGetUniformLocation(program, "specular_colour"), 1, glm::value_ptr(_constants.specular));
+		glUniform3fv(glGetUniformLocation(program, "ambient_colour"), 1, glm::value_ptr(_constants.ambient));
+		glUniform3fv(glGetUniformLocation(program, "emissive_colour"), 1, glm::value_ptr(_constants.emissive));
+		glUniform1f(glGetUniformLocation(program, "shininess_value"), _constants.shininess);
+		glUniform1f(glGetUniformLocation(program, "index_of_refraction_value"), _constants.indexOfRefraction);
+		glUniform1f(glGetUniformLocation(program, "opacity_value"), _constants.opacity);
+
+
+
+		glBindVertexArray(_vao);
+
+		if (_has_indices)
+			glDrawElements(_drawing_mode, _indices_nb, GL_UNSIGNED_INT, reinterpret_cast<GLvoid const*>(0x0));
+		else
+			glDrawArrays(_drawing_mode, 0, _vertices_nb);
+		glBindVertexArray(0u);
+
+		glUseProgram(0u);
+
+		utils::opengl::debug::endDebugGroup();
+	}
+
 public:
-	void render(glm::mat4 const& view_projection, int num_particles) const {
+	void render(glm::mat4 const& view_projection, glm::mat4 const& view_projection_inv, int num_particles) const {
 		if (_program != nullptr) {
-			render(view_projection, _transform.GetMatrix(), *_program, _set_uniforms, num_particles);
+			render(view_projection, view_projection_inv, _transform.GetMatrix(), *_program, _set_uniforms, num_particles);
+		}
+	}
+
+	void render2(glm::mat4 const& view_projection, glm::mat4 const& view_projection_inv) const {
+		if (_program != nullptr) {
+			render2(view_projection, view_projection_inv, _transform.GetMatrix(), *_program, _set_uniforms);
 		}
 	}
 
@@ -191,6 +240,16 @@ edaf80::Fluid::run()
 		diffuse_shader);
 	if (diffuse_shader == 0u) {
 		LogError("Failed to load diffuse shader");
+		return;
+	}
+
+	GLuint ray_march_shader = 0u;
+	program_manager.CreateAndRegisterProgram("Ray March",
+		{ { ShaderType::vertex, "sphere_shaders/ray_march.vert" },
+		  { ShaderType::fragment, "sphere_shaders/ray_march.frag" } },
+		ray_march_shader);
+	if (ray_march_shader == 0u) {
+		LogError("Failed to load ray_march shader");
 		return;
 	}
 
@@ -290,6 +349,13 @@ edaf80::Fluid::run()
 		return;
 	}
 
+
+	auto grid_quad = parametric_shapes::createHighTesselationQuad(2.0, 2.0, 1, 1);
+	if (grid_quad.vao == 0u) {
+		LogError("Failed to retrieve the mesh for the grid quad");
+		return;
+	}
+
 	float PI = 3.14159265358979;
 
 	int num_particles = 16384 * 16;
@@ -305,6 +371,8 @@ edaf80::Fluid::run()
 	float pressure_multiplier = 64.0;
 	float near_pressure_multiplier = 2.0;
 	float viscosity_strength = 0.1;
+	float step_size = 0.1;
+	float density_multiplier = 0.1;
 
 	int PRIME1 = 86183;
 	int PRIME2 = 7475723;
@@ -315,12 +383,6 @@ edaf80::Fluid::run()
 	std::vector<Particle> particles;
 	std::vector<ViscosityForce> viscosity_forces;
 
-	ParticleRenderer particle_renderer;
-	particle_renderer.set_geometry(grid_sphere);
-	particle_renderer.set_program(&diffuse_shader, set_uniforms);
-	bonobo::material_data material;
-	material.diffuse = glm::vec3(0.0, 0.6, 1.0);
-	particle_renderer.set_material_constants(material);
 
 	//float spacing = 3 * grid_sphere_radius;
 	glm::vec3 square_center = glm::vec3(width / 10, height / 10, 0.0);
@@ -347,6 +409,20 @@ edaf80::Fluid::run()
 
 	std::vector<glm::ivec2> spatial(num_particles);
 	std::vector<int> start_inds(num_particles);
+
+	auto const set_uniforms_quad = [&](GLuint program) {
+		glUniform3fv(glGetUniformLocation(program, "light_position"), 1, glm::value_ptr(light_position));
+		glUniform1f(glGetUniformLocation(program, "elapsed_time_s"), elapsed_time_s);
+		glUniform1f(glGetUniformLocation(program, "step_size"), step_size);
+		glUniform1f(glGetUniformLocation(program, "smoothing_radius"), smoothing_radius);
+		glUniform1i(glGetUniformLocation(program, "num_particles"), num_particles);
+		glUniform1f(glGetUniformLocation(program, "density_multiplier"), density_multiplier);
+		glUniform1f(glGetUniformLocation(program, "half_width"), half_width);
+		glUniform1f(glGetUniformLocation(program, "half_height"), half_height);
+		glUniform1f(glGetUniformLocation(program, "half_depth"), half_depth);
+		glUniform3fv(glGetUniformLocation(program, "camera_position"), 1, glm::value_ptr(camera_position));
+	};
+
 
 	GLuint ssbo_particles;
 	glGenBuffers(1, &ssbo_particles);
@@ -389,6 +465,18 @@ edaf80::Fluid::run()
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_colours);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(Colour), colours.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, ssbo_colours);
+
+	ParticleRenderer particle_renderer;
+	particle_renderer.set_geometry(grid_sphere);
+	particle_renderer.set_program(&diffuse_shader, set_uniforms);
+
+	particle_renderer.set_geometry(grid_quad);
+	particle_renderer.set_program(&ray_march_shader, set_uniforms_quad);
+
+	bonobo::material_data material;
+	material.diffuse = glm::vec3(0.0, 0.6, 1.0);
+	particle_renderer.set_material_constants(material);
+
 
 	auto simulation_step = [&](float delta_time) -> void {
 		// Gravity and update predicted positions
@@ -520,6 +608,8 @@ edaf80::Fluid::run()
 	float basis_length_scale = 1.0f;
 
 	bool pause = false;
+	bool particle = false;
+	bool last_render_val = false;
 
 	while (!glfwWindowShouldClose(window)) {
 		half_width = width / 2;
@@ -589,8 +679,30 @@ edaf80::Fluid::run()
 			auto t1 = std::chrono::high_resolution_clock::now();
 			time_to_step = std::chrono::duration<float>(t1 - t0).count();
 
-			particle_renderer.render(mCamera.GetWorldToClipMatrix(), num_particles);
+
+
+			if (particle != last_render_val) {
+				if (particle) {
+					particle_renderer.set_geometry(grid_sphere);
+					particle_renderer.set_program(&diffuse_shader, set_uniforms);
+				}
+				else {
+					particle_renderer.set_geometry(grid_quad);
+					particle_renderer.set_program(&ray_march_shader, set_uniforms_quad);
+				}
+				last_render_val = particle;
+			}
+
+
+			if (particle) {
+				particle_renderer.render(mCamera.GetWorldToClipMatrix(), mCamera.GetClipToWorldMatrix(), num_particles);
+			}
+			else {
+				particle_renderer.render2(mCamera.GetWorldToClipMatrix(), mCamera.GetClipToWorldMatrix());
+			}
 		}
+
+		
 
 
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -605,6 +717,7 @@ edaf80::Fluid::run()
 			ImGui::Text("Time per update: %.10f", time_to_step);
 
 			ImGui::Checkbox("Pause simulation", &pause);
+			ImGui::Checkbox("Render particles", &particle);
 
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);
@@ -622,6 +735,8 @@ edaf80::Fluid::run()
 			ImGui::SliderFloat("Pressure multiplier", &pressure_multiplier, 0.0f, 1000.0f);
 			ImGui::SliderFloat("Viscosity strength", &viscosity_strength, 0.0f, 1.0f);
 			ImGui::SliderFloat("Near pressure multiplier", &near_pressure_multiplier, 0.0f, 10.0f);
+			ImGui::SliderFloat("Ray march step size", &step_size, 0.01f, 0.5f);
+			ImGui::SliderFloat("Ray march density multiplier", &density_multiplier, 0.01f, 1.0f);
 		}
 		ImGui::End();
 
