@@ -203,6 +203,7 @@ void main()
 		tot_density += density;
 	}
 
-	frag_color = vec4(vec3(tot_density), 1.0);
+	vec3 water = vec3(94.0, 219.0, 228.0) / 255.0;
+	frag_color = vec4(tot_density * water, 1.0);
 
 }
