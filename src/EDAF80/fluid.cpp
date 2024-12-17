@@ -358,7 +358,7 @@ edaf80::Fluid::run()
 
 	float PI = 3.14159265358979;
 
-	int num_particles = 16384 * 4;
+	int num_particles = 16384 * 16;
 	int num_work_groups = num_particles / 1024;
 	int sqrtN = sqrt(num_particles);
 	float time_step = 1 / 60.0;
@@ -370,9 +370,10 @@ edaf80::Fluid::run()
 	float target_density = 77.5;
 	float pressure_multiplier = 64.0;
 	float near_pressure_multiplier = 2.0;
-	float viscosity_strength = 0.1;
+	float viscosity_strength = 0.03;
 	float step_size = 0.05;
 	float density_multiplier = 0.01;
+	glm::vec3 scattering_coefficients = glm::vec3(0.0f);
 
 	int PRIME1 = 86183;
 	int PRIME2 = 7475723;
@@ -421,6 +422,7 @@ edaf80::Fluid::run()
 		glUniform1f(glGetUniformLocation(program, "half_height"), half_height);
 		glUniform1f(glGetUniformLocation(program, "half_depth"), half_depth);
 		glUniform3fv(glGetUniformLocation(program, "camera_position"), 1, glm::value_ptr(camera_position));
+		glUniform3fv(glGetUniformLocation(program, "scattering_coefficients"), 1, glm::value_ptr(scattering_coefficients));
 	};
 
 
@@ -735,6 +737,11 @@ edaf80::Fluid::run()
 
 			ImGui::Checkbox("Pause simulation", &pause);
 			ImGui::Checkbox("Render particles", &particle);
+
+
+			ImGui::SliderFloat("Coeff r", &scattering_coefficients.x, 0.0f, 10.0f);
+			ImGui::SliderFloat("Coeff g", &scattering_coefficients.y, 0.0f, 10.0f);
+			ImGui::SliderFloat("Coeff b", &scattering_coefficients.z, 0.0f, 10.0f);
 
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);

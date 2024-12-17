@@ -37,6 +37,7 @@ uniform float half_height;
 uniform float half_depth;
 uniform float step_size;
 uniform float density_multiplier;
+uniform vec3 scattering_coefficients;
 
 uniform vec3 light_position;
 uniform vec3 diffuse_colour;
@@ -171,6 +172,19 @@ vec2 intersections(vec3 orig, vec3 dir){
 }
 
 
+float get_density_along_ray(vec3 orig, vec3 dir, float step_size) {
+	float density = 0.0;
+
+	vec2 inter = intersections(orig, dir);
+
+	for (float lambda = eps; lambda < inter.y - eps; lambda += step_size) {
+		vec3 point = orig + lambda * dir;
+		density += calculate_density(point) * density_multiplier * step_size;
+	}
+
+	return density;
+}
+
 
 void main()
 {
@@ -196,14 +210,23 @@ void main()
 
 	float tot_density = 0.0;
 
+	vec3 tot_light = vec3(0.0);
+
 	if(inter.x < 0) inter.x = 0;
 	for(float lambda = inter.x + eps; lambda < inter.y - eps; lambda += step_size){
 		vec3 point = orig + lambda * dir;
 		float density = calculate_density(point) * density_multiplier * step_size;
 		tot_density += density;
+
+		float sun_ray_density = get_density_along_ray(point, normalize(light_position - point), 10.0 * step_size);
+		vec3 transmitted_sunlight = exp(-sun_ray_density * scattering_coefficients);
+
+		vec3 in_scattered_light = transmitted_sunlight * density * scattering_coefficients;
+		vec3 view_transmittance = exp(-tot_density * scattering_coefficients);
+		tot_light += in_scattered_light * view_transmittance;
 	}
 
 	vec3 water = vec3(94.0, 219.0, 228.0) / 255.0;
 	frag_color = vec4(tot_density * water, 1.0);
-
+	frag_color = vec4(tot_light, 1.0);
 }
