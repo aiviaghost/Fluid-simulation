@@ -60,23 +60,13 @@ private:
 	// Debug data
 	std::string _name{ "Render un-named node" };
 
-	void render(glm::mat4 const& view_projection, glm::mat4& world, GLuint program, std::function<void(GLuint)> const& set_uniforms, std::vector<glm::vec3> const& positions, std::vector<glm::vec3> const& colours) const {
+	void render(glm::mat4 const& view_projection, glm::mat4& world, GLuint program, std::function<void(GLuint)> const& set_uniforms, int num_particles) const {
 		if (_vao == 0u || program == 0u)
 			return;
 
 		utils::opengl::debug::beginDebugGroup(_name);
 
 		glUseProgram(program);
-
-		//glm::mat4 const& world = glm::mat4(1.0);
-
-		/*for (int i = 0; i < 4; i++) {
-			for (int j = 0; j < 4; j++) {
-				std::cout << world[i][j] << " ";
-			}
-			std::cout << std::endl;
-		}
-		std::exit(0);*/
 
 		auto const normal_model_to_world = glm::transpose(glm::inverse(world));
 
@@ -85,16 +75,6 @@ private:
 		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_model_to_world"), 1, GL_FALSE, glm::value_ptr(world));
 		glUniformMatrix4fv(glGetUniformLocation(program, "normal_model_to_world"), 1, GL_FALSE, glm::value_ptr(normal_model_to_world));
 		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_world_to_clip"), 1, GL_FALSE, glm::value_ptr(view_projection));
-
-		/*for (size_t i = 0u; i < _textures.size(); ++i) {
-			auto const& texture = _textures[i];
-			glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(i));
-			glBindTexture(std::get<2>(texture), std::get<1>(texture));
-			glUniform1i(glGetUniformLocation(program, std::get<0>(texture).c_str()), static_cast<GLint>(i));
-
-			std::string texture_presence_var_name = "has_" + std::get<0>(texture);
-			glUniform1i(glGetUniformLocation(program, texture_presence_var_name.c_str()), 1);
-		}*/
 
 		glUniform3fv(glGetUniformLocation(program, "diffuse_colour"), 1, glm::value_ptr(_constants.diffuse));
 		glUniform3fv(glGetUniformLocation(program, "specular_colour"), 1, glm::value_ptr(_constants.specular));
@@ -108,47 +88,11 @@ private:
 
 		glBindVertexArray(_vao);
 
-		unsigned int instanceVBO;
-		const unsigned int vertex_offset_index = 5;
-		glGenBuffers(1, &instanceVBO);
-		glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * positions.size(), static_cast<GLvoid const*>(positions.data()), GL_STATIC_DRAW);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-		glEnableVertexAttribArray(vertex_offset_index);
-		glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-		glVertexAttribPointer(vertex_offset_index, 3, GL_FLOAT, GL_FALSE, 0, (void*)0/*960*/);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glVertexAttribDivisor(vertex_offset_index, 1);
-
-
-		const unsigned int colour_index = 6;
-		glGenBuffers(1, &instanceVBO);
-		glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * colours.size(), static_cast<GLvoid const*>(colours.data()), GL_STATIC_DRAW);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-		glEnableVertexAttribArray(colour_index);
-		glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-		glVertexAttribPointer(colour_index, 3, GL_FLOAT, GL_FALSE, 0, (void*)0/*960*/);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glVertexAttribDivisor(colour_index, 1);
-
-
-
 		if (_has_indices)
-			glDrawElementsInstanced(_drawing_mode, _indices_nb, GL_UNSIGNED_INT, reinterpret_cast<GLvoid const*>(0x0), positions.size());
+			glDrawElementsInstanced(_drawing_mode, _indices_nb, GL_UNSIGNED_INT, reinterpret_cast<GLvoid const*>(0x0), num_particles);
 		else
 			glDrawArrays(_drawing_mode, 0, _vertices_nb);
 		glBindVertexArray(0u);
-
-		/*for (auto const& texture : _textures) {
-			glBindTexture(std::get<2>(texture), 0);
-			glUniform1i(glGetUniformLocation(program, std::get<0>(texture).c_str()), 0);
-
-			std::string texture_presence_var_name = "has_" + std::get<0>(texture);
-			glUniform1i(glGetUniformLocation(program, texture_presence_var_name.c_str()), 0);
-		}*/
 
 		glUseProgram(0u);
 
@@ -156,9 +100,9 @@ private:
 	}
 
 public:
-	void render(glm::mat4 const& view_projection, std::vector<glm::vec3> const& positions, std::vector<glm::vec3> const& colours) const {
+	void render(glm::mat4 const& view_projection, int num_particles) const {
 		if (_program != nullptr) {
-			render(view_projection, _transform.GetMatrix(), *_program, _set_uniforms, positions, colours);
+			render(view_projection, _transform.GetMatrix(), *_program, _set_uniforms, num_particles);
 		}
 	}
 
@@ -331,13 +275,7 @@ edaf80::Fluid::run()
 		glUniform3fv(glGetUniformLocation(program, "light_position"), 1, glm::value_ptr(light_position));
 		glUniform1f(glGetUniformLocation(program, "elapsed_time_s"), elapsed_time_s);
 		glUniform3fv(glGetUniformLocation(program, "camera_position"), 1, glm::value_ptr(camera_position));
-		};
-
-
-
-
-
-
+	};
 
 
 	float grid_sphere_radius = 0.03;
@@ -349,7 +287,7 @@ edaf80::Fluid::run()
 
 	float PI = 3.14159265358979;
 
-	int num_particles = 16384;
+	int num_particles = 16384 * 4;
 	int num_work_groups = num_particles / 1024;
 	int sqrtN = sqrt(num_particles);
 	float time_step = 1 / 60.0;
@@ -551,11 +489,6 @@ edaf80::Fluid::run()
 		glUniform1f(glGetUniformLocation(update_position_shader, "damping_factor"), damping_factor);
 		glDispatchCompute(num_work_groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-
-		// Copy to particles vector for rendering
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_particles);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, num_particles * sizeof(Particle), particles.data());
 	};
 
 
@@ -662,12 +595,7 @@ edaf80::Fluid::run()
 			auto t1 = std::chrono::high_resolution_clock::now();
 			time_to_step = std::chrono::duration<float>(t1 - t0).count();
 
-			concurrency::parallel_for(size_t(0), size_t(num_particles), [&](size_t i) {
-				colours[i] = speed_to_color(glm::l2Norm(particles[i].velocity));
-				positions[i] = particles[i].position;
-			});
-
-			particle_renderer.render(mCamera.GetWorldToClipMatrix(), positions, colours);
+			particle_renderer.render(mCamera.GetWorldToClipMatrix(), num_particles);
 		}
 
 
