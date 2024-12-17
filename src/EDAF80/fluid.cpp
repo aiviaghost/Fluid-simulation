@@ -608,8 +608,13 @@ edaf80::Fluid::run()
 	float basis_length_scale = 1.0f;
 
 	bool pause = false;
-	bool particle = false;
+	bool particle = true;
 	bool last_render_val = false;
+
+	GLuint64 timer, timer2;
+	GLint64 timer1;
+	unsigned int query;
+	int done = 0;
 
 	while (!glfwWindowShouldClose(window)) {
 		half_width = width / 2;
@@ -677,7 +682,16 @@ edaf80::Fluid::run()
 			
 			auto t0 = std::chrono::high_resolution_clock::now();
 			if (!pause) {
+				glGenQueries(1, &query);
+				glBeginQuery(GL_TIME_ELAPSED, query);
 				simulation_step(time_step);
+				glEndQuery(GL_TIME_ELAPSED);
+				while (!done) {
+					glGetQueryObjectiv(query,
+						GL_QUERY_RESULT_AVAILABLE,
+						&done);
+				}
+				glGetQueryObjectui64v(query, GL_QUERY_RESULT, &timer);
 			}
 			auto t1 = std::chrono::high_resolution_clock::now();
 			time_to_step = std::chrono::duration<float>(t1 - t0).count();
@@ -717,7 +731,7 @@ edaf80::Fluid::run()
 		bool const opened = ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_None);
 		if (opened) {
 			ImGui::Text("Time per frame:  %.10f", std::chrono::duration<float>(deltaTimeUs).count());
-			ImGui::Text("Time per update: %.10f", time_to_step);
+			ImGui::Text("Time per update: %.10f", timer / 1e9);
 
 			ImGui::Checkbox("Pause simulation", &pause);
 			ImGui::Checkbox("Render particles", &particle);
