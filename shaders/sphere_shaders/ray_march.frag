@@ -110,20 +110,86 @@ float calculate_density(vec3 point) {
 }
 
 
+float eps = 0.000001;
+vec2 intersections(vec3 orig, vec3 dir){
+	float mini = 10000000.0;
+	float maxi = -1.0;
+
+	vec3 bounds = vec3(half_width, half_height, half_depth);
+
+	float l;
+	vec3 p;
+
+	if(abs(dir.x) > eps){
+		l = (bounds.x - orig.x) / dir.x;
+		p = orig + l * dir;
+		if(abs(p.y) < bounds.y && abs(p.z) < bounds.z){		
+			mini = min(mini, l);
+			maxi = max(maxi, l);
+		}
+		l = (-bounds.x - orig.x) / dir.x;
+		p = orig + l * dir;
+		if(abs(p.y) < bounds.y && abs(p.z) < bounds.z){		
+			mini = min(mini, l);
+			maxi = max(maxi, l);
+		}
+	}
+
+	if(abs(dir.y) > eps){
+		l = (bounds.y - orig.y) / dir.y;
+		p = orig + l * dir;
+		if(abs(p.x) < bounds.x && abs(p.z) < bounds.z){		
+			mini = min(mini, l);
+			maxi = max(maxi, l);
+		}
+		l = (-bounds.y - orig.y) / dir.y;
+		p = orig + l * dir;
+		if(abs(p.x) < bounds.x && abs(p.z) < bounds.z){		
+			mini = min(mini, l);
+			maxi = max(maxi, l);
+		}
+	}
+
+	if(abs(dir.z) > eps){
+		l = (bounds.z - orig.z) / dir.z;
+		p = orig + l * dir;
+		if(abs(p.y) < bounds.y && abs(p.x) < bounds.x){		
+			mini = min(mini, l);
+			maxi = max(maxi, l);
+		}
+		l = (-bounds.z - orig.z) / dir.z;
+		p = orig + l * dir;
+		if(abs(p.y) < bounds.y && abs(p.x) < bounds.x){		
+			mini = min(mini, l);
+			maxi = max(maxi, l);
+		}
+	}
+
+	return vec2(mini, maxi);
+}
+
+
 
 void main()
 {
-	vec3 L = normalize(light_position - fs_in.vertex);
-	frag_color = vec4(fs_in.colour, 1.0) * clamp(dot(normalize(fs_in.normal), L), 0.0, 1.0);
-	frag_color = vec4(fs_in.colour, 1.0);
-	frag_color = vec4(gl_FragCoord.xy, 0.0, 1.0);
-	frag_color = vec4(fs_in.texcoords.xy, 0.0, 1.0);
+
 
 	vec2 uv = fs_in.texcoords.xy * 2.0 - 1.0;
 	vec4 clip_space = vec4(uv, -1.0, 1.0);
 	vec4 world_space = vertex_clip_to_world * clip_space;
 	world_space /= world_space.w;
 
-	vec3 ray_origin = camera_position;
-	vec3 ray_dir = normalize(world_space.xyz - ray_origin);
+	vec3 orig = camera_position;
+	vec3 dir = normalize(world_space.xyz - orig);
+
+	vec2 inter = intersections(orig, dir);
+
+
+	frag_color = vec4(fs_in.texcoords.xy, 0.0, 1.0);
+	frag_color = vec4(dir, 1.0);
+
+	if(inter.y > 0){
+		frag_color = vec4(1.0);
+	}
+
 }
