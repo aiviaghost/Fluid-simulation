@@ -26,6 +26,10 @@ layout(std430, binding = 6) buffer ColourBuffer {
     Colour colours[];
 };
 
+layout(std430, binding = 7) buffer ColourMapBuffer {
+    Colour speedmap[];
+};
+
 uniform float delta_time;
 uniform float half_width;
 uniform float half_height;
@@ -78,22 +82,11 @@ void main() {
 
 	// Colour
 	float speed = length(particles[id].velocity);
-	if (speed > 17) {
-		colours[id].colour = vec3(1.0, 0.0, 0.0);
-	}
-	else if (speed > 12) {
-		colours[id].colour = vec3(0.9, 0.3, 0.0);
-	}
-	else if (speed > 8) {
-		colours[id].colour = vec3(0.7, 0.4, 0.0);
-	}
-	else if (speed > 5) {
-		colours[id].colour = vec3(0.5, 0.5, 0.0);
-	}
-	else if (speed > 2) {
-		colours[id].colour = vec3(0.0, 0.5, 0.5);
-	}
-	else {
-		colours[id].colour = vec3(0.0, 0.6, 1.0);
-	}
+
+	speed /= 6.0;
+	speed = clamp(speed, 0.0, 1.9);
+	float part = mod(speed, 1.0);
+	int speed_int = int(speed);
+
+	colours[id].colour = mix(speedmap[speed_int].colour, speedmap[speed_int + 1].colour, part);
 }

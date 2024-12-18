@@ -410,8 +410,8 @@ edaf80::Fluid::run()
 	};
 
 
-	float grid_sphere_radius = 0.03;
-	auto grid_sphere = parametric_shapes::createSphere(grid_sphere_radius, 2u, 2u);
+	float grid_sphere_radius = 0.07;
+	auto grid_sphere = parametric_shapes::createSphere(grid_sphere_radius, 15u, 15u);
 	if (grid_sphere.vao == 0u) {
 		LogError("Failed to retrieve the mesh for the grid_sphere");
 		return;
@@ -569,6 +569,21 @@ edaf80::Fluid::run()
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_colours);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(Colour), colours.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, ssbo_colours);
+
+	std::vector<Colour> speedmap(3);
+	speedmap[0].colour = glm::vec3(0.0, 0.0, 1.0);
+	speedmap[1].colour = glm::vec3(1.0, 1.0, 0.0);
+	speedmap[2].colour = glm::vec3(1.0, 0.0, 0.0);
+
+	GLuint ssbo_speedmap;
+	glGenBuffers(1, &ssbo_speedmap);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_speedmap);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, speedmap.size() * sizeof(Colour), speedmap.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, ssbo_speedmap);
+
+
+
+
 
 	ParticleRenderer particles_renderer;
 	particles_renderer.set_geometry(grid_sphere);
