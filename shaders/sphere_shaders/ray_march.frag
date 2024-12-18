@@ -260,6 +260,7 @@ vec3 ray_march(vec3 orig, vec3 dir) {
 		float n2 = start_in_water ? n_air : n_water;
 		float reflectance = get_reflectance(dir, normal, n1, n2);
 
+		// if(start_in_water) p = p - step_size * dir;
 		float density_refract = reflectance == 1.0 ? 0.0 : get_density_along_ray(p, refract(dir, normal, n1 / n2), step_size * 10.0);
 		//float density_reflect = get_density_along_ray(p - step_size * dir, reflect(dir, normal), step_size * 10.0);
 		float density_reflect = get_density_along_ray(p, reflect(dir, normal), step_size * 10.0);
@@ -276,14 +277,14 @@ vec3 ray_march(vec3 orig, vec3 dir) {
 
 
 		if(do_refract) {
+			p = p - step_size * dir;
 			dir = refract(dir, normal, n1 / n2);
 			transmittance *= (1.0 - reflectance);
-			p = p - step_size * dir;
 
 		} else {
+			// p = p - step_size * dir;
 			dir = reflect(dir, normal);
 			transmittance *= reflectance;
-			//p = p - step_size * dir;
 		}
 
 

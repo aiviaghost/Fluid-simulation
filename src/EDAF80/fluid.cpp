@@ -859,7 +859,7 @@ edaf80::Fluid::run()
 		bool const opened = ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_None);
 		if (opened) {
 			ImGui::Text("Time per frame:  %.10f", std::chrono::duration<float>(deltaTimeUs).count());
-			ImGui::Text("Time per update: %.10f", timer / 1e9);
+			// ImGui::Text("Time per update: %.10f", timer / 1e9);
 
 			ImGui::Checkbox("Pause simulation", &pause);
 			ImGui::Checkbox("Render particles", &particle);
@@ -868,7 +868,7 @@ edaf80::Fluid::run()
 			ImGui::SliderFloat("Coeff r", &scattering_coefficients.x, 0.0f, 10.0f);
 			ImGui::SliderFloat("Coeff g", &scattering_coefficients.y, 0.0f, 10.0f);
 			ImGui::SliderFloat("Coeff b", &scattering_coefficients.z, 0.0f, 10.0f);
-			ImGui::SliderInt("Number of refractions", &num_refractions, 0, 5);
+			// ImGui::SliderInt("Number of refractions", &num_refractions, 0, 5);
 
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);
