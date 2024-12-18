@@ -38,11 +38,16 @@ uniform float half_depth;
 uniform float step_size;
 uniform float density_multiplier;
 uniform vec3 scattering_coefficients;
+int num_refractions = 2;
+vec3 bounds = vec3(half_width, half_height, half_depth);
 
 uniform vec3 light_position;
 uniform vec3 diffuse_colour;
 uniform mat4 vertex_clip_to_world;
 uniform vec3 camera_position;
+
+float n_air = 1.0;
+float n_water = 1.33;
 
 in VS_OUT {
 	vec3 vertex;
@@ -172,6 +177,22 @@ vec2 intersections(vec3 orig, vec3 dir){
 }
 
 
+float get_reflectance(vec3 I, vec3 normal, float n1, float n2) {
+	float eta = n1 / n2;
+	float cos_in = -dot(I, normal);
+	float sin_sqr_refract = eta * eta * (1.0 - cos_in * cos_in);
+
+	// Total reflectance
+	if(sin_sqr_refract >= 1.0) return 1.0; 
+
+	float cos_refract = sqrt(1.0 - sin_sqr_refract);
+	float sqrt_ray_perp = (n1 * cos_in - n2 * cos_refract) / (n1 * cos_in + n2 * cos_refract);
+	float sqrt_ray_para = (n2 * cos_in - n1 * cos_refract) / (n2 * cos_in + n1 * cos_refract);
+
+	return (sqrt_ray_perp * sqrt_ray_perp + sqrt_ray_para * sqrt_ray_para) * 0.5;
+}
+
+
 float get_density_along_ray(vec3 orig, vec3 dir, float step_size) {
 	float density = 0.0;
 
@@ -183,6 +204,85 @@ float get_density_along_ray(vec3 orig, vec3 dir, float step_size) {
 	}
 
 	return density;
+}
+
+bool inside_box(vec3 point) {
+	vec3 a = abs(point);
+	return a.x < bounds.x && a.y < bounds.y && a.z < bounds.z;
+}
+
+vec3 get_normal(vec3 point) {
+	float dx = calculate_density(point - vec3(0.1, 0.0, 0.0)) - calculate_density(point + vec3(0.1, 0.0, 0.0));
+	float dy = calculate_density(point - vec3(0.0, 0.1, 0.0)) - calculate_density(point + vec3(0.0, 0.1, 0.0));
+	float dz = calculate_density(point - vec3(0.0, 0.0, 0.1)) - calculate_density(point + vec3(0.0, 0.0, 0.1));
+	return normalize(vec3(dx, dy, dz));
+}
+
+vec3 env_light(vec3 orig, vec3 dir) {
+	return vec3(1.0);
+}
+
+vec3 ray_march(vec3 orig, vec3 dir) {
+
+	vec3 transmittance = vec3(1.0);
+	vec3 light = vec3(0.0);
+
+	vec3 p = orig;
+
+	for(int i = 0; i < num_refractions; i++) {
+
+		// Track ray, find next surface
+		orig = p;
+		float ray_density = 0.0;
+		bool start_in_water = inside_box(orig) && calculate_density(orig) > 0.0;
+		vec2 inter = intersections(orig, dir);
+		bool found = false;
+
+		for(float lambda = max(eps, inter.x - 2.0); lambda < inter.y - eps; lambda += step_size) {
+			p = orig + lambda * dir;
+			float density_p = calculate_density(p) * density_multiplier * step_size;
+			ray_density += density_p;
+			bool now_in_water = inside_box(p) && density_p > 0.0;
+			if(start_in_water != now_in_water) {
+				found = true;
+				break;
+			}
+		}
+
+		transmittance *= exp(-ray_density * scattering_coefficients);
+		if(!found) break;
+
+		vec3 normal = get_normal(p);
+		float n1 = start_in_water ? n_water : n_air;
+		float n2 = start_in_water ? n_air : n_water;
+		float reflectance = get_reflectance(dir, normal, n1, n2);
+
+		float density_refract = reflectance == 1.0 ? 0.0 : get_density_along_ray(p, refract(dir, normal, n1 / n2), step_size * 10.0);
+		float density_reflect = get_density_along_ray(p - dir, reflect(dir, normal), step_size * 10.0);
+		bool do_refract = density_refract * (1.0 - reflectance) > density_reflect * reflectance;
+
+		if(do_refract) {
+			light += env_light(p - dir, dir) * transmittance * exp(-density_reflect * scattering_coefficients) * reflectance;
+		} else {
+			light += env_light(p, dir) * transmittance * exp(-density_refract * scattering_coefficients) * (1.0 - reflectance);
+		}
+
+
+		if(do_refract) {
+			dir = refract(dir, normal, n1 / n2);
+			transmittance *= (1.0 - reflectance);
+		} else {
+			dir = reflect(dir, normal);
+			transmittance *= reflectance;
+			p = p - dir;
+		}
+
+
+
+	}
+
+	light += env_light(p, dir) * transmittance * exp(-get_density_along_ray(p, dir, step_size) * scattering_coefficients);
+	return vec3(1.0) - light;
 }
 
 
@@ -207,6 +307,9 @@ void main()
 	if(inter.y > 0){
 		frag_color = vec4(1.0);
 	}
+
+	frag_color = vec4(ray_march(orig, dir), 1.0);
+	return;
 
 	float tot_density = 0.0;
 
