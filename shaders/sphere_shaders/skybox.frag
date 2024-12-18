@@ -2,6 +2,7 @@
 
 uniform sampler2D diffuse_texture;
 uniform int has_diffuse_texture;
+uniform vec3 camera_position;
 
 in VS_OUT {
 	vec3 vertex;
@@ -14,5 +15,5 @@ uniform samplerCube cubemap;
 
 void main()
 {
-	frag_color = texture(cubemap, fs_in.vertex);
+	frag_color = texture(cubemap, normalize(fs_in.vertex - camera_position));
 }
