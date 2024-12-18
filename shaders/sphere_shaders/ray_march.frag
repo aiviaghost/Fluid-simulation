@@ -46,6 +46,8 @@ uniform vec3 diffuse_colour;
 uniform mat4 vertex_clip_to_world;
 uniform vec3 camera_position;
 
+uniform samplerCube cubemap;
+
 float n_air = 1.0;
 float n_water = 1.33;
 
@@ -219,7 +221,8 @@ vec3 get_normal(vec3 point) {
 }
 
 vec3 env_light(vec3 orig, vec3 dir) {
-	return vec3(1.0);
+	// return vec3(1.0);
+	return texture(cubemap, dir).xyz;
 }
 
 vec3 ray_march(vec3 orig, vec3 dir) {
@@ -261,6 +264,8 @@ vec3 ray_march(vec3 orig, vec3 dir) {
 		float density_reflect = get_density_along_ray(p - dir, reflect(dir, normal), step_size * 10.0);
 		bool do_refract = density_refract * (1.0 - reflectance) > density_reflect * reflectance;
 
+		// if(i == 1) return vec3(0.0, density_refract * (1.0 - reflectance), density_reflect * reflectance);
+
 		if(do_refract) {
 			light += env_light(p - dir, dir) * transmittance * exp(-density_reflect * scattering_coefficients) * reflectance;
 		} else {
@@ -282,6 +287,7 @@ vec3 ray_march(vec3 orig, vec3 dir) {
 	}
 
 	light += env_light(p, dir) * transmittance * exp(-get_density_along_ray(p, dir, step_size) * scattering_coefficients);
+	return light;
 	return vec3(1.0) - light;
 }
 

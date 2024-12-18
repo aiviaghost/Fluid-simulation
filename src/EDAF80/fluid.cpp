@@ -57,6 +57,7 @@ private:
 	std::function<void(GLuint)> _set_uniforms;
 
 	// Material data
+	std::vector<std::tuple<std::string, GLuint, GLenum>> _textures;
 	bonobo::material_data _constants;
 
 	// Transformation data
@@ -82,6 +83,15 @@ private:
 		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_world_to_clip"), 1, GL_FALSE, glm::value_ptr(view_projection));
 		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_clip_to_world"), 1, GL_FALSE, glm::value_ptr(view_projection_inv));
 		
+		for (size_t i = 0u; i < _textures.size(); ++i) {
+			auto const& texture = _textures[i];
+			glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(i));
+			glBindTexture(std::get<2>(texture), std::get<1>(texture));
+			glUniform1i(glGetUniformLocation(program, std::get<0>(texture).c_str()), static_cast<GLint>(i));
+
+			std::string texture_presence_var_name = "has_" + std::get<0>(texture);
+			glUniform1i(glGetUniformLocation(program, texture_presence_var_name.c_str()), 1);
+		}
 
 		glUniform3fv(glGetUniformLocation(program, "diffuse_colour"), 1, glm::value_ptr(_constants.diffuse));
 		glUniform3fv(glGetUniformLocation(program, "specular_colour"), 1, glm::value_ptr(_constants.specular));
@@ -100,6 +110,14 @@ private:
 		else
 			glDrawArrays(_drawing_mode, 0, _vertices_nb);
 		glBindVertexArray(0u);
+
+		for (auto const& texture : _textures) {
+			glBindTexture(std::get<2>(texture), 0);
+			glUniform1i(glGetUniformLocation(program, std::get<0>(texture).c_str()), 0);
+
+			std::string texture_presence_var_name = "has_" + std::get<0>(texture);
+			glUniform1i(glGetUniformLocation(program, texture_presence_var_name.c_str()), 0);
+		}
 
 		glUseProgram(0u);
 
@@ -123,6 +141,16 @@ private:
 		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_world_to_clip"), 1, GL_FALSE, glm::value_ptr(view_projection));
 		glUniformMatrix4fv(glGetUniformLocation(program, "vertex_clip_to_world"), 1, GL_FALSE, glm::value_ptr(view_projection_inv));
 
+		for (size_t i = 0u; i < _textures.size(); ++i) {
+			auto const& texture = _textures[i];
+			glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(i));
+			glBindTexture(std::get<2>(texture), std::get<1>(texture));
+			glUniform1i(glGetUniformLocation(program, std::get<0>(texture).c_str()), static_cast<GLint>(i));
+
+			std::string texture_presence_var_name = "has_" + std::get<0>(texture);
+			glUniform1i(glGetUniformLocation(program, texture_presence_var_name.c_str()), 1);
+		}
+
 
 		glUniform3fv(glGetUniformLocation(program, "diffuse_colour"), 1, glm::value_ptr(_constants.diffuse));
 		glUniform3fv(glGetUniformLocation(program, "specular_colour"), 1, glm::value_ptr(_constants.specular));
@@ -141,6 +169,15 @@ private:
 		else
 			glDrawArrays(_drawing_mode, 0, _vertices_nb);
 		glBindVertexArray(0u);
+
+
+		for (auto const& texture : _textures) {
+			glBindTexture(std::get<2>(texture), 0);
+			glUniform1i(glGetUniformLocation(program, std::get<0>(texture).c_str()), 0);
+
+			std::string texture_presence_var_name = "has_" + std::get<0>(texture);
+			glUniform1i(glGetUniformLocation(program, texture_presence_var_name.c_str()), 0);
+		}
 
 		glUseProgram(0u);
 
@@ -179,6 +216,28 @@ public:
 		_name = std::string("Render ") + shape.name;
 
 		_constants = shape.material;
+	}
+
+	void add_texture(std::string const& name, GLuint tex_id, GLenum type)
+	{
+		GLint max_combined_texture_image_units{ -1 };
+		glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &max_combined_texture_image_units);
+		std::size_t const max_active_texture_count
+			= (max_combined_texture_image_units > 0) ? static_cast<std::size_t>(max_combined_texture_image_units)
+			: 80; // OpenGL 4.x guarantees at least 80.
+
+		if (_textures.size() >= max_active_texture_count) {
+			LogWarning("Trying to add more textures to an object than supported (%llu); the texture %s with ID %u will **not** be added. If you really need that many textures, do not use the `Node` class and roll your own solution instead.",
+				max_active_texture_count, name.c_str(), tex_id);
+			return;
+		}
+		if (tex_id == 0u) {
+			LogWarning("0 is not a valid texture ID; the texture %s (with ID %u) will **not** be added.",
+				name.c_str(), tex_id);
+			return;
+		}
+
+		_textures.emplace_back(name, tex_id, type);
 	}
 
 	TRSTransformf& get_transform()
@@ -252,6 +311,15 @@ edaf80::Fluid::run()
 		LogError("Failed to load ray_march shader");
 		return;
 	}
+
+
+	GLuint skybox_shader = 0u;
+	program_manager.CreateAndRegisterProgram("Skybox",
+		{ { ShaderType::vertex, "sphere_shaders/skybox.vert" },
+		  { ShaderType::fragment, "sphere_shaders/skybox.frag" } },
+		skybox_shader);
+	if (skybox_shader == 0u)
+		LogError("Failed to load skybox shader");
 
 
 	GLuint predicted_position_shader = 0u;
@@ -355,6 +423,40 @@ edaf80::Fluid::run()
 		LogError("Failed to retrieve the mesh for the grid quad");
 		return;
 	}
+
+
+	auto skybox_shape = parametric_shapes::createSphere(500.0f, 100u, 100u);
+	if (skybox_shape.vao == 0u) {
+		LogError("Failed to retrieve the mesh for the skybox");
+		return;
+	}
+
+
+
+	GLuint cubemap = bonobo::loadTextureCubeMap(
+		config::resources_path("cubemaps/NissiBeach2/posx.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/negx.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/posy.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/negy.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/posz.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/negz.jpg"));
+
+
+	GLuint cubemap2 = bonobo::loadTextureCubeMap(
+		config::resources_path("cubemaps/NissiBeach2/posx.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/negx.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/posy.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/negy.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/posz.jpg"),
+		config::resources_path("cubemaps/NissiBeach2/negz.jpg"));
+
+
+	Node skybox;
+	skybox.set_geometry(skybox_shape);
+	skybox.set_program(&skybox_shader, set_uniforms);
+	skybox.add_texture("cubemap", cubemap, GL_TEXTURE_CUBE_MAP);
+
+
 
 	float PI = 3.14159265358979;
 
@@ -468,16 +570,16 @@ edaf80::Fluid::run()
 	glBufferData(GL_SHADER_STORAGE_BUFFER, num_particles * sizeof(Colour), colours.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, ssbo_colours);
 
-	ParticleRenderer particle_renderer;
-	particle_renderer.set_geometry(grid_sphere);
-	particle_renderer.set_program(&diffuse_shader, set_uniforms);
+	ParticleRenderer particles_renderer;
+	particles_renderer.set_geometry(grid_sphere);
+	particles_renderer.set_program(&diffuse_shader, set_uniforms);
 
-	particle_renderer.set_geometry(grid_quad);
-	particle_renderer.set_program(&ray_march_shader, set_uniforms_quad);
+	ParticleRenderer ray_marcher;
+	ray_marcher.set_geometry(grid_quad);
+	ray_marcher.set_program(&ray_march_shader, set_uniforms_quad);
+	ray_marcher.add_texture("cubemap", cubemap2, GL_TEXTURE_CUBE_MAP);
 
-	bonobo::material_data material;
-	material.diffuse = glm::vec3(0.0, 0.6, 1.0);
-	particle_renderer.set_material_constants(material);
+
 
 
 	auto simulation_step = [&](float delta_time) -> void {
@@ -700,25 +802,29 @@ edaf80::Fluid::run()
 
 
 
-			if (particle != last_render_val) {
-				if (particle) {
-					particle_renderer.set_geometry(grid_sphere);
-					particle_renderer.set_program(&diffuse_shader, set_uniforms);
-				}
-				else {
-					particle_renderer.set_geometry(grid_quad);
-					particle_renderer.set_program(&ray_march_shader, set_uniforms_quad);
-				}
-				last_render_val = particle;
-			}
+			//if (particle != last_render_val) {
+			//	if (particle) {
+			//		//particle_renderer.add_texture("cubemap", cubemap, GL_TEXTURE_CUBE_MAP);
+			//		particle_renderer.set_geometry(grid_sphere);
+			//		particle_renderer.set_program(&diffuse_shader, set_uniforms);
+			//	}
+			//	else {
+			//		//particle_renderer.add_texture("cubemap", cubemap, GL_TEXTURE_CUBE_MAP);
+			//		particle_renderer.set_geometry(grid_quad);
+			//		particle_renderer.set_program(&ray_march_shader, set_uniforms_quad);
+			//	}
+			//	last_render_val = particle;
+			//}
 
 
 			if (particle) {
-				particle_renderer.render(mCamera.GetWorldToClipMatrix(), mCamera.GetClipToWorldMatrix(), num_particles);
+				particles_renderer.render(mCamera.GetWorldToClipMatrix(), mCamera.GetClipToWorldMatrix(), num_particles);
+				skybox.render(mCamera.GetWorldToClipMatrix());
 			}
 			else {
-				particle_renderer.render2(mCamera.GetWorldToClipMatrix(), mCamera.GetClipToWorldMatrix());
+				ray_marcher.render2(mCamera.GetWorldToClipMatrix(), mCamera.GetClipToWorldMatrix());
 			}
+
 		}
 
 		
