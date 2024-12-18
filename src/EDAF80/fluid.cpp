@@ -463,6 +463,7 @@ edaf80::Fluid::run()
 	int num_particles = 16384 * 16;
 	int num_work_groups = num_particles / 1024;
 	int sqrtN = sqrt(num_particles);
+	int cbrtN = pow(num_particles, 0.35);
 	float time_step = 1 / 60.0;
 	float damping_factor = 0.95;
 	float width = 16.0f, height = 9.0f, depth = 16.0f;
@@ -475,7 +476,8 @@ edaf80::Fluid::run()
 	float viscosity_strength = 0.03;
 	float step_size = 0.05;
 	float density_multiplier = 0.01;
-	glm::vec3 scattering_coefficients = glm::vec3(0.0f);
+	int num_refractions = 1;
+	glm::vec3 scattering_coefficients = glm::vec3(0.173, 0.069, 0.0);
 
 	int PRIME1 = 86183;
 	int PRIME2 = 7475723;
@@ -486,26 +488,48 @@ edaf80::Fluid::run()
 	std::vector<Particle> particles;
 	std::vector<ViscosityForce> viscosity_forces;
 
+	int particles_created = 0;
 
 	//float spacing = 3 * grid_sphere_radius;
 	glm::vec3 square_center = glm::vec3(width / 10, height / 10, 0.0);
-	float spacing = half_height / ((sqrtN - 1));
-	for (int i = 0; i < sqrtN; i++) {
-		for (int j = 0; j < sqrtN; j++) {
-			auto pos = glm::vec3(-half_height / 2 + i * spacing, -half_height / 2 + j * spacing, rand() * 1.0 / RAND_MAX) + square_center;
-			//auto pos = glm::vec3((rand() * 1.0f / RAND_MAX) * width - half_width, (rand() * 1.0f / RAND_MAX) * height - half_height, 100.0f);
-			particles.push_back(Particle());
-			particles.back().position = pos;
+	//float spacing = half_height / ((sqrtN - 0));
+	//for (int i = 0; i < sqrtN + 1; i++) {
+	//	for (int j = 0; j < sqrtN + 1 && particles_created < num_particles; j++) {
+	//		particles_created++;
+	//		auto pos = glm::vec3(-half_height / 2 + i * spacing, -half_height / 2 + j * spacing, rand() * 1.0 / RAND_MAX) + square_center;
+	//		//auto pos = glm::vec3((rand() * 1.0f / RAND_MAX) * width - half_width, (rand() * 1.0f / RAND_MAX) * height - half_height, 100.0f);
+	//		particles.push_back(Particle());
+	//		particles.back().position = pos;
 
-			auto velocity = glm::vec3(0, 0, 0);
-			//velocities.push_back(velocity);
-			colours.push_back(Colour());
-			viscosity_forces.push_back(ViscosityForce());
+	//		auto velocity = glm::vec3(0, 0, 0);
+	//		//velocities.push_back(velocity);
+	//		colours.push_back(Colour());
+	//		viscosity_forces.push_back(ViscosityForce());
+	//	}
+	//}
+
+
+	float spacing = half_height / cbrtN;
+	for (int i = 0; i < cbrtN + 1; i++) {
+		for (int j = 0; j < cbrtN + 1; j++) {
+			for (int k = 0; k < cbrtN + 1 && particles_created < num_particles; k++) {
+				particles_created++;
+				auto pos = glm::vec3(-half_height / 2 + i * spacing, -half_height / 2 + j * spacing, -half_depth / 2 + k * spacing) + square_center;
+				//auto pos = glm::vec3((rand() * 1.0f / RAND_MAX) * width - half_width, (rand() * 1.0f / RAND_MAX) * height - half_height, 100.0f);
+				particles.push_back(Particle());
+				particles.back().position = pos;
+
+				auto velocity = glm::vec3(0, 0, 0);
+				//velocities.push_back(velocity);
+				colours.push_back(Colour());
+				viscosity_forces.push_back(ViscosityForce());
+			}
 		}
 	}
 
 
 	num_particles = particles.size();
+	std::cout << num_particles << std::endl;
 	std::vector<float> densities(num_particles);
 	std::vector<float> near_densities(num_particles);
 	std::vector<glm::vec3> predicted_positions(num_particles);
@@ -519,6 +543,7 @@ edaf80::Fluid::run()
 		glUniform1f(glGetUniformLocation(program, "step_size"), step_size);
 		glUniform1f(glGetUniformLocation(program, "smoothing_radius"), smoothing_radius);
 		glUniform1i(glGetUniformLocation(program, "num_particles"), num_particles);
+		glUniform1i(glGetUniformLocation(program, "num_refractions"), num_refractions);
 		glUniform1f(glGetUniformLocation(program, "density_multiplier"), density_multiplier);
 		glUniform1f(glGetUniformLocation(program, "half_width"), half_width);
 		glUniform1f(glGetUniformLocation(program, "half_height"), half_height);
@@ -689,29 +714,6 @@ edaf80::Fluid::run()
 	};
 
 
-
-	auto speed_to_color = [](float speed) -> glm::vec3 {
-		bonobo::material_data mat;
-		if (speed > 17) {
-			return glm::vec3(1.0, 0.0, 0.0);
-		}
-		else if (speed > 12) {
-			return glm::vec3(0.9, 0.3, 0.0);
-		}
-		else if (speed > 8) {
-			return glm::vec3(0.7, 0.4, 0.0);
-		}
-		else if (speed > 5) {
-			return glm::vec3(0.5, 0.5, 0.0);
-		}
-		else if (speed > 2) {
-			return glm::vec3(0.0, 0.5, 0.5);
-		}
-		else {
-			return glm::vec3(0.0, 0.6, 1.0);
-		}
-	};
-
 	glClearDepthf(1.0f);
 	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 	glEnable(GL_DEPTH_TEST);
@@ -726,7 +728,7 @@ edaf80::Fluid::run()
 	float basis_thickness_scale = 1.0f;
 	float basis_length_scale = 1.0f;
 
-	bool pause = false;
+	bool pause = true;
 	bool particle = true;
 	bool last_render_val = false;
 
@@ -734,6 +736,8 @@ edaf80::Fluid::run()
 	GLint64 timer1;
 	unsigned int query;
 	int done = 0;
+
+	simulation_step(time_step);
 
 	while (!glfwWindowShouldClose(window)) {
 		half_width = width / 2;
@@ -801,16 +805,17 @@ edaf80::Fluid::run()
 			
 			auto t0 = std::chrono::high_resolution_clock::now();
 			if (!pause) {
-				glGenQueries(1, &query);
-				glBeginQuery(GL_TIME_ELAPSED, query);
+				//glGenQueries(1, &query);
+				//glBeginQuery(GL_TIME_ELAPSED, query);
 				simulation_step(time_step);
-				glEndQuery(GL_TIME_ELAPSED);
-				while (!done) {
-					glGetQueryObjectiv(query,
-						GL_QUERY_RESULT_AVAILABLE,
-						&done);
-				}
-				glGetQueryObjectui64v(query, GL_QUERY_RESULT, &timer);
+				// if (!particle) simulation_step(time_step);
+				//glEndQuery(GL_TIME_ELAPSED);
+				//while (!done) {
+				//	glGetQueryObjectiv(query,
+				//		GL_QUERY_RESULT_AVAILABLE,
+				//		&done);
+				//}
+				//glGetQueryObjectui64v(query, GL_QUERY_RESULT, &timer);
 			}
 			auto t1 = std::chrono::high_resolution_clock::now();
 			time_to_step = std::chrono::duration<float>(t1 - t0).count();
@@ -863,14 +868,15 @@ edaf80::Fluid::run()
 			ImGui::SliderFloat("Coeff r", &scattering_coefficients.x, 0.0f, 10.0f);
 			ImGui::SliderFloat("Coeff g", &scattering_coefficients.y, 0.0f, 10.0f);
 			ImGui::SliderFloat("Coeff b", &scattering_coefficients.z, 0.0f, 10.0f);
+			ImGui::SliderInt("Number of refractions", &num_refractions, 0, 5);
 
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);
 			ImGui::SliderFloat("Basis length scale", &basis_length_scale, 0.0f, 100.0f);
 
-			ImGui::SliderFloat("Bounding box width", &width, 1, 10);
+			ImGui::SliderFloat("Bounding box width", &width, 1, 16);
 			ImGui::SliderFloat("Bounding box height", &height, 1, 10);
-			ImGui::SliderFloat("Bounding box depth", &depth, 1, 10);
+			ImGui::SliderFloat("Bounding box depth", &depth, 1, 16);
 
 			ImGui::SliderFloat("Damping factor", &damping_factor, 0.0f, 1.0f);
 			ImGui::SliderFloat("Gravity strength", &gravity_strength, 0.0f, 100.0f);
@@ -878,7 +884,7 @@ edaf80::Fluid::run()
 			//ImGui::SliderFloat("Time step", &time_step, 0.0f, 0.5f);
 			ImGui::SliderFloat("Target_density", &target_density, 0.0f, 700.0f);
 			ImGui::SliderFloat("Pressure multiplier", &pressure_multiplier, 0.0f, 1000.0f);
-			ImGui::SliderFloat("Viscosity strength", &viscosity_strength, 0.0f, 1.0f);
+			ImGui::SliderFloat("Viscosity strength", &viscosity_strength, 0.0f, 0.1f);
 			ImGui::SliderFloat("Near pressure multiplier", &near_pressure_multiplier, 0.0f, 10.0f);
 			ImGui::SliderFloat("Ray march step size", &step_size, 0.01f, 0.5f);
 			ImGui::SliderFloat("Ray march density multiplier", &density_multiplier, 0.001f, 0.1f);

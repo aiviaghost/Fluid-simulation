@@ -38,7 +38,7 @@ uniform float half_depth;
 uniform float step_size;
 uniform float density_multiplier;
 uniform vec3 scattering_coefficients;
-int num_refractions = 2;
+uniform int num_refractions;
 vec3 bounds = vec3(half_width, half_height, half_depth);
 
 uniform vec3 light_position;
@@ -241,7 +241,7 @@ vec3 ray_march(vec3 orig, vec3 dir) {
 		vec2 inter = intersections(orig, dir);
 		bool found = false;
 
-		for(float lambda = max(eps, inter.x - 2.0); lambda < inter.y - eps; lambda += step_size) {
+		for(float lambda = max(eps, inter.x - eps); lambda < inter.y - eps; lambda += step_size) {
 			p = orig + lambda * dir;
 			float density_p = calculate_density(p) * density_multiplier * step_size;
 			ray_density += density_p;
@@ -261,13 +261,15 @@ vec3 ray_march(vec3 orig, vec3 dir) {
 		float reflectance = get_reflectance(dir, normal, n1, n2);
 
 		float density_refract = reflectance == 1.0 ? 0.0 : get_density_along_ray(p, refract(dir, normal, n1 / n2), step_size * 10.0);
-		float density_reflect = get_density_along_ray(p - dir, reflect(dir, normal), step_size * 10.0);
+		//float density_reflect = get_density_along_ray(p - step_size * dir, reflect(dir, normal), step_size * 10.0);
+		float density_reflect = get_density_along_ray(p, reflect(dir, normal), step_size * 10.0);
 		bool do_refract = density_refract * (1.0 - reflectance) > density_reflect * reflectance;
 
 		// if(i == 1) return vec3(0.0, density_refract * (1.0 - reflectance), density_reflect * reflectance);
 
 		if(do_refract) {
-			light += env_light(p - dir, dir) * transmittance * exp(-density_reflect * scattering_coefficients) * reflectance;
+			//light += env_light(p - step_size * dir, dir) * transmittance * exp(-density_reflect * scattering_coefficients) * reflectance;
+			light += env_light(p, dir) * transmittance * exp(-density_reflect * scattering_coefficients) * reflectance;
 		} else {
 			light += env_light(p, dir) * transmittance * exp(-density_refract * scattering_coefficients) * (1.0 - reflectance);
 		}
@@ -276,10 +278,12 @@ vec3 ray_march(vec3 orig, vec3 dir) {
 		if(do_refract) {
 			dir = refract(dir, normal, n1 / n2);
 			transmittance *= (1.0 - reflectance);
+			p = p - step_size * dir;
+
 		} else {
 			dir = reflect(dir, normal);
 			transmittance *= reflectance;
-			p = p - dir;
+			//p = p - step_size * dir;
 		}
 
 
@@ -287,7 +291,7 @@ vec3 ray_march(vec3 orig, vec3 dir) {
 	}
 
 	light += env_light(p, dir) * transmittance * exp(-get_density_along_ray(p, dir, step_size) * scattering_coefficients);
-	return light;
+	return light * 1.00;
 	return vec3(1.0) - light;
 }
 
@@ -315,27 +319,5 @@ void main()
 	}
 
 	frag_color = vec4(ray_march(orig, dir), 1.0);
-	return;
-
-	float tot_density = 0.0;
-
-	vec3 tot_light = vec3(0.0);
-
-	if(inter.x < 0) inter.x = 0;
-	for(float lambda = inter.x + eps; lambda < inter.y - eps; lambda += step_size){
-		vec3 point = orig + lambda * dir;
-		float density = calculate_density(point) * density_multiplier * step_size;
-		tot_density += density;
-
-		float sun_ray_density = get_density_along_ray(point, normalize(light_position - point), 10.0 * step_size);
-		vec3 transmitted_sunlight = exp(-sun_ray_density * scattering_coefficients);
-
-		vec3 in_scattered_light = transmitted_sunlight * density * scattering_coefficients;
-		vec3 view_transmittance = exp(-tot_density * scattering_coefficients);
-		tot_light += in_scattered_light * view_transmittance;
-	}
-
-	vec3 water = vec3(94.0, 219.0, 228.0) / 255.0;
-	frag_color = vec4(tot_density * water, 1.0);
-	frag_color = vec4(tot_light, 1.0);
+	
 }
