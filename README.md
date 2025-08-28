@@ -14,10 +14,10 @@ A more exact specification of how the system works can be found in [report.pdf](
 There are some different ways of simulating fluids. This project uses *smoothed-particle hydrodynamics*. In short, it involves modeling the fluid as a big number of particles (in our case on the order of $10^5$). A density field is defined, where the density in a point depends on how many particles are in the proximity. Forces are then applied to the particles to move them from areas of high density to areas of lower density.
 In order to compute the forces quickly, we use compute shaders along with a technique called spatial hashing.
 
-<p align="center">
+<p align="center" style="text-align:center">
     <img src="readme_images/same_particles.jpg" width="300" alt="Rendered particles">
     <img src="readme_images/same_ray_marching.jpg" width="300" alt="Ray marched">
-    Rendered particles compared with ray marching
+    <p align="center"><b>Rendered particles compared with ray marching</b></p>
 </p>
 
 One option is to simply display the fluid as a collection of particles, and with the high number of particles being simulated, this does look fine. However, we also implemented ray marching to render a realistic fluid based on the simulated particles. Each pixel fires a ray that steps through the fluid and picks up color. Reflection and refraction upon entering the fluid are also approximated.
