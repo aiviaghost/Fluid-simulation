@@ -5,7 +5,7 @@ This repository contains the code for a fluid simulation and rendering program m
 The project was based on two excellent videos by [Sebastian Lague](https://www.youtube.com/@SebastianLague): [*Coding Adventure: Simulating Fluids*](https://www.youtube.com/watch?v=rSKMYc1CQHE) and [*Coding Adventure: Rendering Fluids*](https://www.youtube.com/watch?v=kOkfC5fLfgE)
 
 <p align="center">
-    <img src="readme_images/example.jpg" width="480" alt="Example render">
+    <img src="readme_images/example2.jpg" width="480" alt="Example render">
 </p>
 
 # Fluid Simulation
@@ -15,8 +15,8 @@ There are some different ways of simulating fluids. This project uses *smoothed-
 In order to compute the forces quickly, we use compute shaders along with a technique called spatial hashing.
 
 <p align="center" style="text-align:center">
-    <img src="readme_images/same_particles.jpg" width="300" alt="Rendered particles">
-    <img src="readme_images/same_ray_marching.jpg" width="300" alt="Ray marched">
+    <img src="readme_images/same_particles2.jpg" width="300" alt="Rendered particles">
+    <img src="readme_images/same_ray_marching2.jpg" width="300" alt="Ray marched">
     <p align="center"><b>Rendered particles compared with ray marching</b></p>
 </p>
 
