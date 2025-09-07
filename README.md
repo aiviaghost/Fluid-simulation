@@ -9,7 +9,7 @@ The project was based on two excellent videos by [Sebastian Lague](https://www.y
 </p>
 
 # Fluid Simulation
-A more exact specification of how the system works can be found in [report_specification.pdf](https://github.com/aiviaghost/Fluid-simulation/blob/main/report_specification.pdf), but here below we will simply summarize the work on a high level.
+A more exact specification of how the system works can be found in [report.pdf](https://github.com/aiviaghost/Fluid-simulation/blob/main/report.pdf), but here below we will simply summarize the work on a high level.
 
 There are some different ways of simulating fluids. This project uses *smoothed-particle hydrodynamics*. In short, it involves modeling the fluid as a big number of particles (in our case on the order of $10^5$). A density field is defined, where the density in a point depends on how many particles are in the proximity. Forces are then applied to the particles to move them from areas of high density to areas of lower density.
 In order to compute the forces quickly, we use compute shaders along with a technique called spatial hashing.
